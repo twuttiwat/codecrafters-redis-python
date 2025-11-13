@@ -10,8 +10,20 @@ def handle_client(client_socket):
             if not data:
                 break
 
-            # Send response to client
-            client_socket.sendall(b"+PONG\r\n")
+            # Parse commands
+            commands = data.split(b"\r\n")
+            num_commands = int(commands[0][1::])
+            if num_commands < 1:
+                break
+
+            match commands[2].lower().decode():
+                case "ping":
+                    client_socket.sendall(b"+PONG\r\n")
+                case "echo":
+                    resp = commands[3] + b"\r\n" + commands[4] + b"\r\n"
+                    client_socket.sendall(resp)
+                case _:
+                    break
 
     except (ConnectionResetError, BrokenPipeError):
         pass
