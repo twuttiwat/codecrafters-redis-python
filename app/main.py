@@ -29,10 +29,13 @@ def process_command(data, store, schedule_remove):
                     response = b"$-1\r\n"
             case "INCR":
                 key = lines[4]
-                value = store.get(key, None)
-                new_value = int(value) + 1 if value is not None else 1
-                store[key] = str(new_value)
-                response = f":{new_value}\r\n".encode()
+                value = store.get(key, "0")
+                if value.isdigit():
+                    new_value = int(value) + 1
+                    store[key] = str(new_value)
+                    response = f":{new_value}\r\n".encode()
+                else:
+                    response = b"-ERR value is not an integer or out of range\r\n"
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
