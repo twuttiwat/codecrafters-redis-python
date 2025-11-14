@@ -31,7 +31,7 @@ def process_command(data, store, schedule_remove):
                 key = lines[4]
                 value = store.get(key, None)
                 new_value = int(value) + 1 if value is not None else 1
-                store[key] = new_value
+                store[key] = str(new_value)
                 response = f":{new_value}\r\n".encode()
             case _:
                 response = b"-ERR unknown command\r\n"
