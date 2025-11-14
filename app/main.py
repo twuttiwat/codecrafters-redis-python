@@ -2,9 +2,44 @@ import socket
 import threading
 import asyncio
 
-store_th = {}
+def process_command(data, store, schedule_remove):
+    if data.startswith("*"):
+        lines = data.split("\r\n")
+        command = lines[2].upper()
+        match command:
+            case "PING":
+                response = b"+PONG\r\n"
+            case "ECHO":
+                message = lines[4]
+                response = f"${len(message)}\r\n{message}\r\n".encode()
+            case "SET":
+                key = lines[4]
+                value = lines[6]
+                if len(lines) > 8:
+                    ttl_seconds = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
+                    schedule_remove(key, ttl_seconds)
+                store[key] = value
+                response = b"+OK\r\n"
+            case "GET":
+                key = lines[4]
+                value = store.get(key, None)
+                if value is not None:
+                    response = f"${len(value)}\r\n{value}\r\n".encode()
+                else:
+                    response = b"$-1\r\n"
+            case "INCR":
+                key = lines[4]
+                value = store.get(key, None)
+                new_value = int(value) + 1 if value is not None else 1
+                store[key] = new_value
+                response = f":{new_value}\r\n".encode()
+            case _:
+                response = b"-ERR unknown command\r\n"
+        return response
+    else:
+        return b"-ERR invalid request\r\n"
 
-def handle_client_th(client_socket):
+def handle_client_th(client_socket, store, schedule_remove):
     while True:
         request = client_socket.recv(1024)
         if not request:
@@ -14,49 +49,22 @@ def handle_client_th(client_socket):
         if not data:
             continue
 
-        if data.startswith("*"):
-            lines = data.split("\r\n")
-            command = lines[2].upper()
-            match command:
-                case "PING":
-                    response = b"+PONG\r\n"
-                case "ECHO":
-                    message = lines[4]
-                    response = f"${len(message)}\r\n{message}\r\n".encode()
-                case "SET":
-                    key = lines[4]
-                    value = lines[6]
-                    if len(lines) > 8:
-                        ttl = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
-                        threading.Timer(ttl, store_th.pop, args=[key]).start()
-                    store_th[key] = value
-                    response = b"+OK\r\n"
-                case "GET":
-                    key = lines[4]
-                    value = store_th.get(key, None)
-                    if value is not None:
-                        response =  f"${len(value)}\r\n{value}\r\n".encode()
-                    else:
-                        response = b"$-1\r\n"
-                case _:
-                    response = b"-ERR unknow command\r\n"
-            client_socket.send(response)
-        else:
-            client_socket.send(b"-ERR invalid request\r\n")
+        response = process_command(data, store, schedule_remove)
+        client_socket.send(response)
 
 def main_th():
     print("Redis Multi-Thread Start!")
 
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    store_th = {}
     while True:
         connection, _ = server_socket.accept()  # wait for client
-        threading.Thread(target=handle_client_th, args=(connection,)).start()
+        threading.Thread(target=handle_client_th, args=(connection, store_th, lambda k, t: threading.Timer(t, store_th.pop, args=[k]).start())).start()
 
-async def handle_client_el(client_socket, store_el):
+async def handle_client_el(client_socket, store_el, schedule_remove):
     loop = asyncio.get_event_loop()
     while True:
         request = await loop.sock_recv(client_socket, 1024)
-        print(f"request: {request}")
         if not request:
             break
 
@@ -64,35 +72,8 @@ async def handle_client_el(client_socket, store_el):
         if not data:
             continue
 
-        if data.startswith("*"):
-            lines = data.split("\r\n")
-            command = lines[2].upper()
-            match command:
-                case "PING":
-                    response = b"+PONG\r\n"
-                case "ECHO":
-                    message = lines[4]
-                    response = f"${len(message)}\r\n{message}\r\n".encode()
-                case "SET":
-                    key = lines[4]
-                    value = lines[6]
-                    if len(lines) > 8:
-                        ttl = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
-                        loop.call_later(ttl, store_el.pop, key)
-                    store_el[key] = value
-                    response = b"+OK\r\n"
-                case "GET":
-                    key = lines[4]
-                    value = store_el.get(key, None)
-                    if value is not None:
-                        response =  f"${len(value)}\r\n{value}\r\n".encode()
-                    else:
-                        response = b"$-1\r\n"
-                case _:
-                    response = b"-ERR unknow command\r\n"
-            client_socket.send(response)
-        else:
-            client_socket.send(b"-ERR invalid request\r\n")
+        response = process_command(data, store_el, schedule_remove)
+        client_socket.send(response)
 
 
 
@@ -103,10 +84,11 @@ async def main_el():
     server_socket.setblocking(False)
     loop = asyncio.get_event_loop()
     store_el = {}
+    schedule_remove = lambda k, t: loop.call_later(t, store_el.pop, k)
 
     while True:
         connection, _ = await loop.sock_accept(server_socket)  # wait for client
-        loop.create_task(handle_client_el(connection, store_el))
+        loop.create_task(handle_client_el(connection, store_el, schedule_remove))
 
 
 if __name__ == "__main__":
