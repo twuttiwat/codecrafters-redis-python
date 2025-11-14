@@ -1,124 +1,113 @@
 import socket
 import threading
-from collections import namedtuple
+import asyncio
 
-set_dict = {}
+store_th = {}
 
-def handle_client_1(client_socket):
-    try:
-        while True:
-            # Receive data from client
-            data = client_socket.recv(1024)
-            print(f"Message received: {data}")
-            if not data:
-                break
-
-            # Parse commands
-            commands = data.split(b"\r\n")
-            num_commands = int(commands[0][1::])
-            if num_commands < 1:
-                break
-
-            match commands[2].lower().decode():
-                case "ping":
-                    client_socket.sendall(b"+PONG\r\n")
-                case "echo":
-                    resp = commands[3] + b"\r\n" + commands[4] + b"\r\n"
-                    client_socket.sendall(resp)
-                case "set":
-                    set_name = commands[4]
-                    set_value = commands[6]
-                    set_dict[set_name] = set_value
-                    client_socket.sendall(b"+OK\r\n")
-                case "get":
-                    get_name = commands[4]
-                    if get_name in set_dict:
-                        get_value = set_dict[get_name]
-                        print(f"get_value: {get_value}")
-                        resp =  b"$" + bytes(str(len(get_value)), 'utf-8') + b"\r\n" + get_value + b"\r\n"
-                        client_socket.sendall(resp)
-                    else:
-                        client_socket.sendall(b"$-1\r\n")
-
-                case _:
-                    break
-
-    except (ConnectionResetError, BrokenPipeError):
-        pass
-    finally:
-        client_socket.close()
-
-
-Command = namedtuple("Command", ["name", "params"])
-
-def parse_command(data):
-    parts = data.split(b"\r\n")
-    num_parts = int(parts[0][1::])
-
-    name = parts[2]
-    params = []
-    index = 4
-    while index < len(parts):
-        params.append(parts[index])
-        index += 2
-
-    return Command(name, params)
-
-def handle_client(client_socket):
-    try:
-        while True:
-            # Receive data from client
-            data = client_socket.recv(1024)
-            print(f"Message received: {data}")
-            if not data:
-                break
-
-            # Parse command
-            command = parse_command(data)
-
-            # Evaluate command
-            match command.name.lower().decode():
-                case "ping":
-                    client_socket.sendall(b"+PONG\r\n")
-                case "echo":
-                    echo_value = command.params[0]
-                    resp = b"$" + bytes(str(len(echo_value)), 'utf-8') + b"\r\n" + echo_value + b"\r\n"
-                    client_socket.sendall(resp)
-                case "set":
-                    set_name = command.params[0]
-                    set_value = command.params[1]
-                    set_dict[set_name] = set_value
-                    client_socket.sendall(b"+OK\r\n")
-                case "get":
-                    get_name = command.params[0]
-                    if get_name in set_dict:
-                        get_value = set_dict[get_name]
-                        print(f"get_value: {get_value}")
-                        resp =  b"$" + bytes(str(len(get_value)), 'utf-8') + b"\r\n" + get_value + b"\r\n"
-                        client_socket.sendall(resp)
-                    else:
-                        client_socket.sendall(b"$-1\r\n")
-
-                case _:
-                    break
-
-    except (ConnectionResetError, BrokenPipeError):
-        pass
-    finally:
-        client_socket.close()
-
-def main():
-    # Listen to client
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-
-   
+def handle_client_th(client_socket):
     while True:
-        # Accept connection
-        client_socket, _ = server_socket.accept()  # wait for client
-        print(f"Connection established")
+        request = client_socket.recv(1024)
+        if not request:
+            break
 
-        # Handle client using new thread
-        threading.Thread(target=handle_client, args=(client_socket,)).start()
+        data = request.decode().strip()
+        if not data:
+            continue
+
+        if data.startswith("*"):
+            lines = data.split("\r\n")
+            command = lines[2].upper()
+            match command:
+                case "PING":
+                    response = b"+PONG\r\n"
+                case "ECHO":
+                    message = lines[4]
+                    response = f"${len(message)}\r\n{message}\r\n".encode()
+                case "SET":
+                    key = lines[4]
+                    value = lines[6]
+                    if len(lines) > 8:
+                        ttl = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
+                        threading.Timer(ttl, store_th.pop, args=[key]).start()
+                    store_th[key] = value
+                    response = b"+OK\r\n"
+                case "GET":
+                    key = lines[4]
+                    value = store_th.get(key, None)
+                    if value is not None:
+                        response =  f"${len(value)}\r\n{value}\r\n".encode()
+                    else:
+                        response = b"$-1\r\n"
+                case _:
+                    response = b"-ERR unknow command\r\n"
+            client_socket.send(response)
+        else:
+            client_socket.send(b"-ERR invalid request\r\n")
+
+def main_th():
+    print("Redis Multi-Thread Start!")
+
+    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    while True:
+        connection, _ = server_socket.accept()  # wait for client
+        threading.Thread(target=handle_client_th, args=(connection,)).start()
+
+async def handle_client_el(client_socket, store_el):
+    loop = asyncio.get_event_loop()
+    while True:
+        request = await loop.sock_recv(client_socket, 1024)
+        print(f"request: {request}")
+        if not request:
+            break
+
+        data = request.decode().strip()
+        if not data:
+            continue
+
+        if data.startswith("*"):
+            lines = data.split("\r\n")
+            command = lines[2].upper()
+            match command:
+                case "PING":
+                    response = b"+PONG\r\n"
+                case "ECHO":
+                    message = lines[4]
+                    response = f"${len(message)}\r\n{message}\r\n".encode()
+                case "SET":
+                    key = lines[4]
+                    value = lines[6]
+                    if len(lines) > 8:
+                        ttl = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
+                        loop.call_later(ttl, store_el.pop, key)
+                    store_el[key] = value
+                    response = b"+OK\r\n"
+                case "GET":
+                    key = lines[4]
+                    value = store_el.get(key, None)
+                    if value is not None:
+                        response =  f"${len(value)}\r\n{value}\r\n".encode()
+                    else:
+                        response = b"$-1\r\n"
+                case _:
+                    response = b"-ERR unknow command\r\n"
+            client_socket.send(response)
+        else:
+            client_socket.send(b"-ERR invalid request\r\n")
+
+
+
+async def main_el():
+    print("Redis EventLoop Start!")
+
+    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    server_socket.setblocking(False)
+    loop = asyncio.get_event_loop()
+    store_el = {}
+
+    while True:
+        connection, _ = await loop.sock_accept(server_socket)  # wait for client
+        loop.create_task(handle_client_el(connection, store_el))
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main_el())
