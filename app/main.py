@@ -26,8 +26,10 @@ def main_th():
         state = State(store = my_store, is_multi = False, schedule_remove = lambda k, t: threading.Timer(t, my_store.pop, args=[k]).start())
         threading.Thread(target=handle_client_th, args=(connection, state)).start()
 
-async def handle_client_el(client_socket, state):
+async def handle_client_el(client_socket):
     loop = asyncio.get_event_loop()
+    my_store = {}
+    state = State(store = my_store, is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
     while True:
         request = await loop.sock_recv(client_socket, 1024)
         if not request:
@@ -48,12 +50,10 @@ async def main_el():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     server_socket.setblocking(False)
     loop = asyncio.get_event_loop()
-    my_store = {}
-    state = State(store = my_store, is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
 
     while True:
         connection, _ = await loop.sock_accept(server_socket)  # wait for client
-        loop.create_task(handle_client_el(connection, state))
+        loop.create_task(handle_client_el(connection))
 
 
 if __name__ == "__main__":

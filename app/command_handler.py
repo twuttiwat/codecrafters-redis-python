@@ -14,6 +14,7 @@ def process_command(data, state):
 
         if state.is_multi and command != "EXEC":
             state.command_queue.append(data)
+            print(f"QUEUE: {data}")
             return b"+QUEUED\r\n"
 
         match command:
@@ -37,6 +38,7 @@ def process_command(data, state):
                     response = f"${len(value)}\r\n{value}\r\n".encode()
                 else:
                     response = b"$-1\r\n"
+                print(f"GET response: {response}")
             case "INCR":
                 key = lines[4]
                 value = state.store.get(key, "0")
