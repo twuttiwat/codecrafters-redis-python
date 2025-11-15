@@ -49,7 +49,7 @@ async def main_el():
     server_socket.setblocking(False)
     loop = asyncio.get_event_loop()
     my_store = {}
-    state = State(store = my_store, is_multi = False, schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
+    state = State(store = my_store, is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
 
     while True:
         connection, _ = await loop.sock_accept(server_socket)  # wait for client

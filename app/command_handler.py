@@ -4,14 +4,18 @@ from dataclasses import dataclass
 class State:
     store: dict
     is_multi: bool
+    command_queue: list
     schedule_remove: object
 
 def process_command(data, state):
     if data.startswith("*"):
-        if state.is_multi:
-            return b"+QUEUED\r\n"
         lines = data.split("\r\n")
         command = lines[2].upper()
+
+        if state.is_multi and command != "EXEC":
+            state.command_queue.append(data)
+            return b"+QUEUED\r\n"
+
         match command:
             case "PING":
                 response = b"+PONG\r\n"
@@ -47,8 +51,14 @@ def process_command(data, state):
                 response = b"+OK\r\n"
             case "EXEC":
                 if not state.is_multi:
+                    print(f"Error Exec")
                     response = b"-ERR EXEC without MULTI\r\n"
+                elif not state.command_queue:
+                    print(f"No queue: {state.command_queue}")
+                    state.is_multi = False
+                    response = b"*0\r\n";
                 else:
+                    print(f"Ok")
                     response = b"+OK\r\n"
             case _:
                 response = b"-ERR unknown command\r\n"
