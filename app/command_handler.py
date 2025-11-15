@@ -45,6 +45,11 @@ def process_command(data, state):
             case "MULTI":
                 state.is_multi = True
                 response = b"+OK\r\n"
+            case "EXEC":
+                if not state.is_multi:
+                    response = b"-ERR EXEC without MULTI\r\n"
+                else:
+                    response = b"+OK\r\n"
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
