@@ -112,6 +112,9 @@ def handle_command(data, state):
                     elem_index += 2
                 state.list_store[lines[4]] = current_list
                 response = f":{len(current_list)}\r\n".encode()
+            case "LLEN":
+                current_list = state.list_store.get(lines[4], [])
+                response = f":{len(current_list)}\r\n".encode()
             case "LRANGE":
                 current_list = state.list_store.get(lines[4], [])
                 lst_len = len(current_list)
