@@ -29,6 +29,9 @@ def resp_array_from_strings(values: list) -> bytes:
 
     return resp
 
+def check_range_negative(lst_len, value):
+    return max(lst_len + value, 0) if value < 0 else value
+
 def handle_command(data, state):
     if data.startswith("*"):
         lines = data.split("\r\n")
@@ -99,20 +102,23 @@ def handle_command(data, state):
                 while elem_index <= len(lines):
                     current_list.append(lines[elem_index])
                     elem_index += 2
-                print(f"RPUSH {lines[4]} has values {current_list}")
                 state.list_store[lines[4]] = current_list
                 response = f":{len(current_list)}\r\n".encode()
             case "LRANGE":
                 current_list = state.list_store.get(lines[4], [])
-                print(f"LRANGE {lines[4]} has values {current_list}")
+                lst_len = len(current_list)
                 start, stop = int(lines[6]), int(lines[8])
-                if len(current_list) == 0:
+
+                start = check_range_negative(lst_len, start)
+                stop = check_range_negative(lst_len, stop)
+
+                if lst_len == 0:
                     response = b"*0\r\n"
-                elif start >= len(current_list):
+                elif start >= lst_len:
                     response = b"*0\r\n"
                 else:
-                    if stop >= len(current_list):
-                       stop = len(current_list) - 1
+                    if stop >= lst_len:
+                       stop = lst_len - 1
                     slice = current_list[start:stop + 1]
                     response = resp_array_from_strings(slice)
             case _:
