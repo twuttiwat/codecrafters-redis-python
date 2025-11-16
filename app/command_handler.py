@@ -35,18 +35,23 @@ def check_range_negative(lst_len, value):
     return max(lst_len + value, 0) if value < 0 else value
 
 async def blpop(list_name: str, timeout: int, state):
-    while True:
-        current_list = state.list_store.get(list_name, [])
-        if len(current_list) == 0:
-            print(f"BLPOP: No elements in list")
-            await asyncio.sleep(1)
-        else:
-           print(f"BLPOP: list: {current_list}")
-           value = current_list.pop(0)
-           response =  resp_array_from_strings([list_name, value])
-           # response = f"${len(value)}\r\n{value}\r\n".encode()
-           print(f"response: {response}")
-           return response
+    timeout = None if timeout == 0 else timeout
+    try:
+        async with asyncio.timeout(timeout):
+            while True:
+                current_list = state.list_store.get(list_name, [])
+                if len(current_list) == 0:
+                    print(f"BLPOP: No elements in list")
+                    await asyncio.sleep(1)
+                else:
+                    print(f"BLPOP: list: {current_list}")
+                    value = current_list.pop(0)
+                    response =  resp_array_from_strings([list_name, value])
+                    # response = f"${len(value)}\r\n{value}\r\n".encode()
+                    print(f"response: {response}")
+                    return response
+    except asyncio.TimeoutError:
+        print(f"Block timeout after {timeout} seconds")
 
 async def handle_command(data, state):
     if data.startswith("*"):
