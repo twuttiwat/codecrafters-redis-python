@@ -21,8 +21,9 @@ def start():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
 
     my_store = {}
+    my_list_store = {}
     while True:
         connection, _ = server_socket.accept()  # wait for client
-        state = State(store = my_store, is_multi = False, command_queue = [], schedule_remove = lambda k, t: threading.Timer(t, my_store.pop, args=[k]).start())
+        state = State(store = my_store, list_store = my_list_store, is_multi = False, command_queue = [], schedule_remove = lambda k, t: threading.Timer(t, my_store.pop, args=[k]).start())
         threading.Thread(target=handle_client, args=(connection, state)).start()
 

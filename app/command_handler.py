@@ -3,7 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class State:
     store: dict
-    list_store: list
+    list_store: dict
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -15,6 +15,17 @@ def resp_array(values: list) -> bytes:
     resp = f"*{len(values)}\r\n".encode()
     for value in values:
         resp += value
+
+    return resp
+
+def bulk_string(value: str) -> bytes:
+    return f"${len(value)}\r\n{value}\r\n".encode()
+
+def resp_array_from_strings(values: list) -> bytes:
+    resp = f"*{len(values)}\r\n".encode()
+
+    for value in values:
+        resp += bulk_string(value)
 
     return resp
 
@@ -83,11 +94,27 @@ def handle_command(data, state):
                     state.command_queue = []
                     response = b"+OK\r\n"
             case "RPUSH":
+                current_list = state.list_store.get(lines[4], [])
                 elem_index = 6
                 while elem_index <= len(lines):
-                    state.list_store.append(lines[elem_index])
+                    current_list.append(lines[elem_index])
                     elem_index += 2
-                response = f":{len(state.list_store)}\r\n".encode()
+                print(f"RPUSH {lines[4]} has values {current_list}")
+                state.list_store[lines[4]] = current_list
+                response = f":{len(current_list)}\r\n".encode()
+            case "LRANGE":
+                current_list = state.list_store.get(lines[4], [])
+                print(f"LRANGE {lines[4]} has values {current_list}")
+                start, stop = int(lines[6]), int(lines[8])
+                if len(current_list) == 0:
+                    response = b"*0\r\n"
+                elif start >= len(current_list):
+                    response = b"*0\r\n"
+                else:
+                    if stop >= len(current_list):
+                       stop = len(current_list) - 1
+                    slice = current_list[start:stop + 1]
+                    response = resp_array_from_strings(slice)
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
