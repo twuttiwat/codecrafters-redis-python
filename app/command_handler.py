@@ -34,15 +34,15 @@ def resp_array_from_strings(values: list) -> bytes:
 def check_range_negative(lst_len, value):
     return max(lst_len + value, 0) if value < 0 else value
 
-async def blpop(list_name: str, timeout: int, state):
-    timeout = None if timeout == 0 else timeout
+async def blpop(list_name: str, timeout: float, state):
+    timeout = None if timeout == 0.0 else timeout
     try:
         async with asyncio.timeout(timeout):
             while True:
                 current_list = state.list_store.get(list_name, [])
                 if len(current_list) == 0:
                     print(f"BLPOP: No elements in list")
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.1)
                 else:
                     print(f"BLPOP: list: {current_list}")
                     value = current_list.pop(0)
@@ -52,6 +52,7 @@ async def blpop(list_name: str, timeout: int, state):
                     return response
     except asyncio.TimeoutError:
         print(f"Block timeout after {timeout} seconds")
+        return b"*-1\r\n"
 
 async def handle_command(data, state):
     if data.startswith("*"):
@@ -150,7 +151,7 @@ async def handle_command(data, state):
                     value = current_list.pop(0)
                     response = f"${len(value)}\r\n{value}\r\n".encode()
             case "BLPOP":
-                response = await blpop(lines[4], int(lines[6]), state)
+                response = await blpop(lines[4], float(lines[6]), state)
             case "LRANGE":
                 current_list = state.list_store.get(lines[4], [])
                 lst_len = len(current_list)
