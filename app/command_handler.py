@@ -115,6 +115,13 @@ def handle_command(data, state):
             case "LLEN":
                 current_list = state.list_store.get(lines[4], [])
                 response = f":{len(current_list)}\r\n".encode()
+            case "LPOP":
+                current_list = state.list_store.get(lines[4], [])
+                if len(current_list) == 0:
+                    response = b"$-1\r\n"
+                else:
+                    value = current_list.pop(0)
+                    response = f"${len(value)}\r\n{value}\r\n".encode()
             case "LRANGE":
                 current_list = state.list_store.get(lines[4], [])
                 lst_len = len(current_list)
