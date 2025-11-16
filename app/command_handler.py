@@ -83,7 +83,10 @@ def handle_command(data, state):
                     state.command_queue = []
                     response = b"+OK\r\n"
             case "RPUSH":
-                state.list_store.append(lines[6])
+                elem_index = 6
+                while elem_index <= len(lines):
+                    state.list_store.append(lines[elem_index])
+                    elem_index += 2
                 response = f":{len(state.list_store)}\r\n".encode()
             case _:
                 response = b"-ERR unknown command\r\n"
