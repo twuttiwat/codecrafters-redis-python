@@ -7,14 +7,24 @@ class State:
     command_queue: list
     schedule_remove: object
 
-def process_command(data, state):
+def resp_array(values: list) -> bytes:
+    if len(values) == 0:
+        return b"*-1\r\n"
+
+    resp = f"*{len(values)}\r\n".encode()
+    for value in values:
+        resp += value
+
+    return resp
+
+def handle_command(data, state):
+    # print(f"state: {state}")
     if data.startswith("*"):
         lines = data.split("\r\n")
         command = lines[2].upper()
 
         if state.is_multi and command != "EXEC":
             state.command_queue.append(data)
-            print(f"QUEUE: {data}")
             return b"+QUEUED\r\n"
 
         match command:
@@ -34,11 +44,11 @@ def process_command(data, state):
             case "GET":
                 key = lines[4]
                 value = state.store.get(key, None)
+                print(f"GET store {state.store}")
                 if value is not None:
                     response = f"${len(value)}\r\n{value}\r\n".encode()
                 else:
                     response = b"$-1\r\n"
-                print(f"GET response: {response}")
             case "INCR":
                 key = lines[4]
                 value = state.store.get(key, "0")
@@ -53,15 +63,18 @@ def process_command(data, state):
                 response = b"+OK\r\n"
             case "EXEC":
                 if not state.is_multi:
-                    print(f"Error Exec")
                     response = b"-ERR EXEC without MULTI\r\n"
                 elif not state.command_queue:
-                    print(f"No queue: {state.command_queue}")
                     state.is_multi = False
-                    response = b"*0\r\n";
+                    response = b"*0\r\n"
                 else:
-                    print(f"Ok")
-                    response = b"+OK\r\n"
+                    state.is_multi = False
+                    responses = []
+                    for command in state.command_queue:
+                        command_resp = handle_command(command, state)
+                        responses.append(command_resp)
+                    state.command_queue = []
+                    response = resp_array(responses)
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
