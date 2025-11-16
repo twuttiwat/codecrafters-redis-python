@@ -18,12 +18,11 @@ def resp_array(values: list) -> bytes:
     return resp
 
 def handle_command(data, state):
-    # print(f"state: {state}")
     if data.startswith("*"):
         lines = data.split("\r\n")
         command = lines[2].upper()
 
-        if state.is_multi and command != "EXEC":
+        if state.is_multi and command != "EXEC" and command != "DISCARD":
             state.command_queue.append(data)
             return b"+QUEUED\r\n"
 
@@ -75,6 +74,13 @@ def handle_command(data, state):
                         responses.append(command_resp)
                     state.command_queue = []
                     response = resp_array(responses)
+            case "DISCARD":
+                if not state.is_multi:
+                    response = b"-ERR DISCARD without MULTI\r\n"
+                else:
+                    state.is_multi = False
+                    state.command_queue = []
+                    response = b"+OK\r\n"
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
