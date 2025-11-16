@@ -119,6 +119,11 @@ def handle_command(data, state):
                 current_list = state.list_store.get(lines[4], [])
                 if len(current_list) == 0:
                     response = b"$-1\r\n"
+                elif len(current_list) >= 6:
+                    values = []
+                    for i in range(int(lines[6])):
+                        values.append(current_list.pop(0))
+                    response = resp_array_from_strings(values)
                 else:
                     value = current_list.pop(0)
                     response = f"${len(value)}\r\n{value}\r\n".encode()
