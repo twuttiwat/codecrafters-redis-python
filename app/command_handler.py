@@ -3,6 +3,7 @@ from dataclasses import dataclass
 @dataclass
 class State:
     store: dict
+    list_store: list
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -81,6 +82,9 @@ def handle_command(data, state):
                     state.is_multi = False
                     state.command_queue = []
                     response = b"+OK\r\n"
+            case "RPUSH":
+                state.list_store.append(lines[6])
+                response = f":{len(state.list_store)}\r\n".encode()
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
