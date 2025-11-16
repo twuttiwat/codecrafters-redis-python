@@ -24,10 +24,12 @@ async def start():
 
     my_store = {}
     my_list_store = {}
+    my_channels = []
 
     while True:
         connection, _ = await asyncio.get_event_loop().sock_accept(server_socket)  # wait for client
         loop = asyncio.get_event_loop()
-        state = State(store = my_store, list_store = my_list_store, is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
+        state = State(store = my_store, list_store = my_list_store, channels = my_channels,
+                      is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
         asyncio.create_task(handle_client(connection, state))
 

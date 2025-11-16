@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class State:
     store: dict
     list_store: dict
+    channels: list
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -22,6 +23,9 @@ def resp_array(values: list) -> bytes:
 
 def bulk_string(value: str) -> bytes:
     return f"${len(value)}\r\n{value}\r\n".encode()
+
+def resp_int(value: int) -> bytes:
+    return f":{value}\r\n".encode()
 
 def resp_array_from_strings(values: list) -> bytes:
     resp = f"*{len(values)}\r\n".encode()
@@ -169,6 +173,10 @@ async def handle_command(data, state):
                        stop = lst_len - 1
                     slice = current_list[start:stop + 1]
                     response = resp_array_from_strings(slice)
+            case "SUBSCRIBE":
+                channel = lines[4]
+                state.channels.append(channel)
+                response = resp_array([bulk_string("subscribe"), bulk_string(channel), resp_int(len(state.channels))])
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
