@@ -12,7 +12,7 @@ async def handle_client(client_socket, state):
         if not data:
             continue
 
-        response = handle_command(data, state)
+        response = await handle_command(data, state)
         print(f"response: {response}")
         client_socket.send(response)
 

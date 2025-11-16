@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 
 @dataclass
@@ -9,6 +10,7 @@ class State:
     schedule_remove: object
 
 def resp_array(values: list) -> bytes:
+    print(f"resp_array: {values}")
     if len(values) == 0:
         return b"*-1\r\n"
 
@@ -32,7 +34,21 @@ def resp_array_from_strings(values: list) -> bytes:
 def check_range_negative(lst_len, value):
     return max(lst_len + value, 0) if value < 0 else value
 
-def handle_command(data, state):
+async def blpop(list_name: str, timeout: int, state):
+    while True:
+        current_list = state.list_store.get(list_name, [])
+        if len(current_list) == 0:
+            print(f"BLPOP: No elements in list")
+            await asyncio.sleep(1)
+        else:
+           print(f"BLPOP: list: {current_list}")
+           value = current_list.pop(0)
+           response =  resp_array_from_strings([list_name, value])
+           # response = f"${len(value)}\r\n{value}\r\n".encode()
+           print(f"response: {response}")
+           return response
+
+async def handle_command(data, state):
     if data.startswith("*"):
         lines = data.split("\r\n")
         command = lines[2].upper()
@@ -85,7 +101,7 @@ def handle_command(data, state):
                     state.is_multi = False
                     responses = []
                     for command in state.command_queue:
-                        command_resp = handle_command(command, state)
+                        command_resp = await handle_command(command, state)
                         responses.append(command_resp)
                     state.command_queue = []
                     response = resp_array(responses)
@@ -117,9 +133,10 @@ def handle_command(data, state):
                 response = f":{len(current_list)}\r\n".encode()
             case "LPOP":
                 current_list = state.list_store.get(lines[4], [])
+                print(f"LPOP: current_list: {current_list}")
                 if len(current_list) == 0:
                     response = b"$-1\r\n"
-                elif len(current_list) >= 6:
+                elif len(lines) >= 6:
                     values = []
                     for i in range(int(lines[6])):
                         values.append(current_list.pop(0))
@@ -127,6 +144,8 @@ def handle_command(data, state):
                 else:
                     value = current_list.pop(0)
                     response = f"${len(value)}\r\n{value}\r\n".encode()
+            case "BLPOP":
+                response = await blpop(lines[4], int(lines[6]), state)
             case "LRANGE":
                 current_list = state.list_store.get(lines[4], [])
                 lst_len = len(current_list)
