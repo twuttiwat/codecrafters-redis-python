@@ -46,7 +46,7 @@ async def blpop(list_name: str, timeout: float, state):
                 current_list = state.list_store.get(list_name, [])
                 if len(current_list) == 0:
                     print(f"BLPOP: No elements in list")
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(0.01)
                 else:
                     print(f"BLPOP: list: {current_list}")
                     value = current_list.pop(0)
@@ -174,9 +174,11 @@ async def handle_command(data, state):
                     slice = current_list[start:stop + 1]
                     response = resp_array_from_strings(slice)
             case "SUBSCRIBE":
-                channel = lines[4]
-                state.channels.append(channel)
-                response = resp_array([bulk_string("subscribe"), bulk_string(channel), resp_int(len(state.channels))])
+                channel_name = lines[4]
+                current_channel = state.channels.get(channel_name, None)
+                if current_channel is None:
+                    state.channels[channel_name] = True
+                response = resp_array([bulk_string("subscribe"), bulk_string(channel_name), resp_int(len(state.channels))])
             case _:
                 response = b"-ERR unknown command\r\n"
         return response

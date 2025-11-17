@@ -22,14 +22,14 @@ async def start():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     server_socket.setblocking(False)
 
-    my_store = {}
-    my_list_store = {}
-    my_channels = []
+    shared_store = {}
+    shared_list_store = {}
 
     while True:
         connection, _ = await asyncio.get_event_loop().sock_accept(server_socket)  # wait for client
         loop = asyncio.get_event_loop()
-        state = State(store = my_store, list_store = my_list_store, channels = my_channels,
-                      is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, my_store.pop, k))
+        client_channels = {}
+        state = State(store = shared_store, list_store = shared_list_store, channels = client_channels,
+                      is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, shared_store.pop, k))
         asyncio.create_task(handle_client(connection, state))
 
