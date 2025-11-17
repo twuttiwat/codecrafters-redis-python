@@ -58,7 +58,7 @@ async def blpop(list_name: str, timeout: float, state):
         print(f"Block timeout after {timeout} seconds")
         return b"*-1\r\n"
 
-async def handle_command(data, state):
+async def handle_command(data, state) -> bytes:
     if data.startswith("*"):
         lines = data.split("\r\n")
         command = lines[2].upper()
@@ -73,7 +73,10 @@ async def handle_command(data, state):
 
         match command:
             case "PING":
-                response = b"+PONG\r\n"
+                if len(state.channels) == 0:
+                    response = b"+PONG\r\n"
+                else:
+                    response = resp_array([bulk_string("pong"), bulk_string("")])
             case "ECHO":
                 message = lines[4]
                 response = f"${len(message)}\r\n{message}\r\n".encode()
