@@ -63,6 +63,10 @@ async def handle_command(data, state):
         lines = data.split("\r\n")
         command = lines[2].upper()
 
+        subscribed_commands = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"]
+        if len(state.channels) > 0 and not command in subscribed_commands:
+            return f"-ERR Can't execute '{command}' in subscribed mode\r\n".encode()
+
         if state.is_multi and command != "EXEC" and command != "DISCARD":
             state.command_queue.append(data)
             return b"+QUEUED\r\n"
