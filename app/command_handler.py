@@ -1,11 +1,14 @@
 import asyncio
 from dataclasses import dataclass
 
+from app.resp import RESPBulkString
+
 @dataclass
 class State:
     store: dict
     list_store: dict
-    channels: list
+    shared_channels: dict
+    channels: dict
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -22,7 +25,8 @@ def resp_array(values: list) -> bytes:
     return resp
 
 def bulk_string(value: str) -> bytes:
-    return f"${len(value)}\r\n{value}\r\n".encode()
+    return RESPBulkString(value.encode()).encode()
+    # return f"${len(value)}\r\n{value}\r\n".encode()
 
 def resp_int(value: int) -> bytes:
     return f":{value}\r\n".encode()
@@ -79,7 +83,9 @@ async def handle_command(data, state) -> bytes:
                     response = resp_array([bulk_string("pong"), bulk_string("")])
             case "ECHO":
                 message = lines[4]
-                response = f"${len(message)}\r\n{message}\r\n".encode()
+                response = bulk_string(lines[4])
+                # response = RESPBulkString(lines[4].encode()).encode()
+                # response = f"${len(message)}\r\n{message}\r\n".encode()
             case "SET":
                 key = lines[4]
                 value = lines[6]
@@ -182,10 +188,20 @@ async def handle_command(data, state) -> bytes:
                     response = resp_array_from_strings(slice)
             case "SUBSCRIBE":
                 channel_name = lines[4]
+
+                channel_clients_count = state.shared_channels.get(channel_name, 0) + 1
+                state.shared_channels[channel_name] = channel_clients_count
+
                 current_channel = state.channels.get(channel_name, None)
                 if current_channel is None:
                     state.channels[channel_name] = True
+
                 response = resp_array([bulk_string("subscribe"), bulk_string(channel_name), resp_int(len(state.channels))])
+            case "PUBLISH":
+                channel_name, message = lines[4], lines[6]
+
+                channel_clients_count = state.shared_channels.get(channel_name, 0)
+                response = f":{channel_clients_count}\r\n".encode()
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
