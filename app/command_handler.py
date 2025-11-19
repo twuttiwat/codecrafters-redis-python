@@ -2,7 +2,7 @@ import socket
 import asyncio
 from dataclasses import dataclass
 
-from app.resp import RESPBulkString, EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_int, simple_string
+from app.resp import EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_string
 
 @dataclass
 class State:
@@ -15,25 +15,6 @@ class State:
     is_multi: bool
     command_queue: list
     schedule_remove: object
-
-def resp_array(values: list) -> bytes:
-    print(f"resp_array: {values}")
-    if len(values) == 0:
-        return b"*-1\r\n"
-
-    resp = f"*{len(values)}\r\n".encode()
-    for value in values:
-        resp += value
-
-    return resp
-
-def resp_array_from_strings(values: list) -> bytes:
-    resp = f"*{len(values)}\r\n".encode()
-
-    for value in values:
-        resp += bulk_string(value)
-
-    return resp
 
 def check_range_negative(lst_len, value):
     return max(lst_len + value, 0) if value < 0 else value
@@ -51,7 +32,6 @@ async def blpop(list_name: str, timeout: float, state):
                     print(f"BLPOP: list: {current_list}")
                     value = current_list.pop(0)
                     response =  resp_array_from_strings([list_name, value])
-                    # response = f"${len(value)}\r\n{value}\r\n".encode()
                     print(f"response: {response}")
                     return response
     except asyncio.TimeoutError:
@@ -235,12 +215,32 @@ async def handle_command(data, state) -> bytes:
 
                 index = 0
                 if current_set:
+                    new_member = True
+
+                    member_index = 0
+                    while member_index < len(current_set) and member != current_set[member_index][0]:
+                        member_index += 1
+                    if member_index < len(current_set):
+                        del current_set[member_index]
+                        new_member = False
+
                     while score < current_set[index][1]:
                         index += 1
 
-                current_set.insert(index, (member, score))
+                    current_set.insert(index, (member, score))
 
-                response = resp_int(len(current_set))
+                    if new_member:
+                        print(f"{member} is a new member.")
+                    else:
+                        print(f"{member} is an old member.")
+
+                    response = resp_int(1) if new_member else resp_int(0)
+                else:
+                    print(f"{set_name} is a new set")
+                    current_set.insert(0, (member, score))
+                    state.sorted_sets[set_name] = current_set
+
+                    response = resp_int(1)
 
             case _:
                 response = b"-ERR unknown command\r\n"
