@@ -1,7 +1,8 @@
+import socket
 import asyncio
 from dataclasses import dataclass
 
-from app.resp import RESPBulkString
+from app.resp import RESPBulkString, OK_STRING, simple_string
 
 @dataclass
 class State:
@@ -9,6 +10,7 @@ class State:
     list_store: dict
     shared_channels: dict
     channels: dict
+    connection: socket
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -79,6 +81,7 @@ async def handle_command(data, state) -> bytes:
             case "PING":
                 if len(state.channels) == 0:
                     response = b"+PONG\r\n"
+                    response = simple_string("PONG")
                 else:
                     response = resp_array([bulk_string("pong"), bulk_string("")])
             case "ECHO":
@@ -93,7 +96,7 @@ async def handle_command(data, state) -> bytes:
                     ttl_seconds = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
                     state.schedule_remove(key, ttl_seconds)
                 state.store[key] = value
-                response = b"+OK\r\n"
+                response = OK_STRING
             case "GET":
                 key = lines[4]
                 value = state.store.get(key, None)
@@ -113,7 +116,7 @@ async def handle_command(data, state) -> bytes:
                     response = b"-ERR value is not an integer or out of range\r\n"
             case "MULTI":
                 state.is_multi = True
-                response = b"+OK\r\n"
+                response = OK_STRING
             case "EXEC":
                 if not state.is_multi:
                     response = b"-ERR EXEC without MULTI\r\n"
@@ -134,7 +137,7 @@ async def handle_command(data, state) -> bytes:
                 else:
                     state.is_multi = False
                     state.command_queue = []
-                    response = b"+OK\r\n"
+                    response = OK_STRING
             case "RPUSH":
                 current_list = state.list_store.get(lines[4], [])
                 elem_index = 6
@@ -189,8 +192,9 @@ async def handle_command(data, state) -> bytes:
             case "SUBSCRIBE":
                 channel_name = lines[4]
 
-                channel_clients_count = state.shared_channels.get(channel_name, 0) + 1
-                state.shared_channels[channel_name] = channel_clients_count
+                channel_clients = state.shared_channels.get(channel_name, [])
+                channel_clients.append(state.connection)
+                state.shared_channels[channel_name] = channel_clients
 
                 current_channel = state.channels.get(channel_name, None)
                 if current_channel is None:
@@ -200,8 +204,13 @@ async def handle_command(data, state) -> bytes:
             case "PUBLISH":
                 channel_name, message = lines[4], lines[6]
 
-                channel_clients_count = state.shared_channels.get(channel_name, 0)
-                response = f":{channel_clients_count}\r\n".encode()
+                channel_clients = state.shared_channels.get(channel_name, [])
+                channel_resp = resp_array([bulk_string("message"), bulk_string(channel_name), bulk_string(message)])
+                # TODO: send message to each subscriber
+                for client in channel_clients:
+                    client.send(channel_resp)
+
+                response = f":{len(channel_clients)}\r\n".encode()
             case _:
                 response = b"-ERR unknown command\r\n"
         return response
