@@ -53,6 +53,9 @@ class RESPSimpleString(RESPValue):
     def data(self) -> bytes:
         return self.value
 
+def bulk_string(value: str) -> bytes:
+    return f"${len(value)}\r\n{value}\r\n".encode()
+
 def simple_string(value: str) -> bytes:
     return f"+{value}\r\n".encode()
 

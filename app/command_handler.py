@@ -2,7 +2,7 @@ import socket
 import asyncio
 from dataclasses import dataclass
 
-from app.resp import RESPBulkString, OK_STRING, simple_string
+from app.resp import RESPBulkString, OK_STRING, bulk_string, simple_string
 
 @dataclass
 class State:
@@ -25,10 +25,6 @@ def resp_array(values: list) -> bytes:
         resp += value
 
     return resp
-
-def bulk_string(value: str) -> bytes:
-    return RESPBulkString(value.encode()).encode()
-    # return f"${len(value)}\r\n{value}\r\n".encode()
 
 def resp_int(value: int) -> bytes:
     return f":{value}\r\n".encode()
@@ -80,15 +76,12 @@ async def handle_command(data, state) -> bytes:
         match command:
             case "PING":
                 if len(state.channels) == 0:
-                    response = b"+PONG\r\n"
                     response = simple_string("PONG")
                 else:
                     response = resp_array([bulk_string("pong"), bulk_string("")])
             case "ECHO":
                 message = lines[4]
                 response = bulk_string(lines[4])
-                # response = RESPBulkString(lines[4].encode()).encode()
-                # response = f"${len(message)}\r\n{message}\r\n".encode()
             case "SET":
                 key = lines[4]
                 value = lines[6]
@@ -189,6 +182,7 @@ async def handle_command(data, state) -> bytes:
                        stop = lst_len - 1
                     slice = current_list[start:stop + 1]
                     response = resp_array_from_strings(slice)
+
             case "SUBSCRIBE":
                 channel_name = lines[4]
 
@@ -201,18 +195,34 @@ async def handle_command(data, state) -> bytes:
                     state.channels[channel_name] = True
 
                 response = resp_array([bulk_string("subscribe"), bulk_string(channel_name), resp_int(len(state.channels))])
+
+            case "UNSUBSCRIBE":
+                channel_name = lines[4]
+
+                channel_clients = state.shared_channels.get(channel_name, [])
+                if state.connection in channel_clients:
+                    channel_clients.remove(state.connection)
+                state.shared_channels[channel_name] = channel_clients
+
+                current_channel = state.channels.get(channel_name, None)
+                if not current_channel is None:
+                    del state.channels[channel_name]
+
+                response = resp_array([bulk_string("unsubscribe"), bulk_string(channel_name), resp_int(len(state.channels))])
+
+
             case "PUBLISH":
                 channel_name, message = lines[4], lines[6]
 
                 channel_clients = state.shared_channels.get(channel_name, [])
                 channel_resp = resp_array([bulk_string("message"), bulk_string(channel_name), bulk_string(message)])
-                # TODO: send message to each subscriber
                 for client in channel_clients:
                     client.send(channel_resp)
 
                 response = f":{len(channel_clients)}\r\n".encode()
             case _:
                 response = b"-ERR unknown command\r\n"
+
         return response
     else:
         return b"-ERR invalid request\r\n"
