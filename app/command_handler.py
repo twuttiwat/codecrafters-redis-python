@@ -224,7 +224,7 @@ async def handle_command(data, state) -> bytes:
                         del current_set[member_index]
                         new_member = False
 
-                    while score < current_set[index][1]:
+                    while index < len(current_set) and score < current_set[index][1]:
                         index += 1
 
                     current_set.insert(index, (member, score))
