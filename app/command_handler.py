@@ -145,7 +145,7 @@ async def handle_command(data, state) -> bytes:
                     response = NULL_BULK_STRING
                 elif len(lines) >= 6:
                     values = []
-                    for i in range(int(lines[6])):
+                    for _ in range(int(lines[6])):
                         values.append(current_list.pop(0))
                     response = resp_array_from_strings(values)
                 else:
@@ -224,23 +224,35 @@ async def handle_command(data, state) -> bytes:
                         del current_set[member_index]
                         new_member = False
 
-                    while index < len(current_set) and score < current_set[index][1]:
+                    while index < len(current_set) and (score > current_set[index][1] or (score == current_set[index][1] and member > current_set[index][0]) ):
                         index += 1
 
                     current_set.insert(index, (member, score))
-
-                    if new_member:
-                        print(f"{member} is a new member.")
-                    else:
-                        print(f"{member} is an old member.")
+                    state.sorted_sets[set_name] = current_set
 
                     response = resp_int(1) if new_member else resp_int(0)
                 else:
-                    print(f"{set_name} is a new set")
                     current_set.insert(0, (member, score))
                     state.sorted_sets[set_name] = current_set
 
                     response = resp_int(1)
+
+                print(f"{set_name}: {current_set}")
+
+            case "ZRANK":
+                set_name, member = lines[4], lines[6]
+                current_set = state.sorted_sets.get(set_name, [])
+                if current_set:
+                    member_index = 0
+                    while member_index < len(current_set) and member != current_set[member_index][0]:
+                        member_index += 1
+
+                    if member_index < len(current_set):
+                        response = resp_int(member_index)
+                    else:
+                        response = NULL_BULK_STRING
+                else:
+                    response = NULL_BULK_STRING
 
             case _:
                 response = b"-ERR unknown command\r\n"
