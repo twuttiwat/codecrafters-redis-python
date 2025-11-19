@@ -2,13 +2,14 @@ import socket
 import asyncio
 from dataclasses import dataclass
 
-from app.resp import RESPBulkString, OK_STRING, bulk_string, simple_string
+from app.resp import RESPBulkString, EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_int, simple_string
 
 @dataclass
 class State:
     store: dict
     list_store: dict
     shared_channels: dict
+    sorted_sets: dict
     channels: dict
     connection: socket
     is_multi: bool
@@ -25,9 +26,6 @@ def resp_array(values: list) -> bytes:
         resp += value
 
     return resp
-
-def resp_int(value: int) -> bytes:
-    return f":{value}\r\n".encode()
 
 def resp_array_from_strings(values: list) -> bytes:
     resp = f"*{len(values)}\r\n".encode()
@@ -71,7 +69,7 @@ async def handle_command(data, state) -> bytes:
 
         if state.is_multi and command != "EXEC" and command != "DISCARD":
             state.command_queue.append(data)
-            return b"+QUEUED\r\n"
+            return simple_string("QUEUED")
 
         match command:
             case "PING":
@@ -79,9 +77,11 @@ async def handle_command(data, state) -> bytes:
                     response = simple_string("PONG")
                 else:
                     response = resp_array([bulk_string("pong"), bulk_string("")])
+
             case "ECHO":
                 message = lines[4]
                 response = bulk_string(lines[4])
+
             case "SET":
                 key = lines[4]
                 value = lines[6]
@@ -90,32 +90,35 @@ async def handle_command(data, state) -> bytes:
                     state.schedule_remove(key, ttl_seconds)
                 state.store[key] = value
                 response = OK_STRING
+
             case "GET":
                 key = lines[4]
                 value = state.store.get(key, None)
-                print(f"GET store {state.store}")
                 if value is not None:
-                    response = f"${len(value)}\r\n{value}\r\n".encode()
+                    response = bulk_string(value)
                 else:
-                    response = b"$-1\r\n"
+                    response = NULL_BULK_STRING
+
             case "INCR":
                 key = lines[4]
                 value = state.store.get(key, "0")
                 if value.isdigit():
                     new_value = int(value) + 1
                     state.store[key] = str(new_value)
-                    response = f":{new_value}\r\n".encode()
+                    response = resp_int(new_value)
                 else:
                     response = b"-ERR value is not an integer or out of range\r\n"
+
             case "MULTI":
                 state.is_multi = True
                 response = OK_STRING
+
             case "EXEC":
                 if not state.is_multi:
                     response = b"-ERR EXEC without MULTI\r\n"
                 elif not state.command_queue:
                     state.is_multi = False
-                    response = b"*0\r\n"
+                    response = EMPTY_ARRAY
                 else:
                     state.is_multi = False
                     responses = []
@@ -124,6 +127,7 @@ async def handle_command(data, state) -> bytes:
                         responses.append(command_resp)
                     state.command_queue = []
                     response = resp_array(responses)
+
             case "DISCARD":
                 if not state.is_multi:
                     response = b"-ERR DISCARD without MULTI\r\n"
@@ -131,6 +135,7 @@ async def handle_command(data, state) -> bytes:
                     state.is_multi = False
                     state.command_queue = []
                     response = OK_STRING
+
             case "RPUSH":
                 current_list = state.list_store.get(lines[4], [])
                 elem_index = 6
@@ -138,7 +143,8 @@ async def handle_command(data, state) -> bytes:
                     current_list.append(lines[elem_index])
                     elem_index += 2
                 state.list_store[lines[4]] = current_list
-                response = f":{len(current_list)}\r\n".encode()
+                response = resp_int(len(current_list))
+
             case "LPUSH":
                 current_list = state.list_store.get(lines[4], [])
                 elem_index = 6
@@ -146,15 +152,17 @@ async def handle_command(data, state) -> bytes:
                     current_list.insert(0, lines[elem_index])
                     elem_index += 2
                 state.list_store[lines[4]] = current_list
-                response = f":{len(current_list)}\r\n".encode()
+                response = resp_int(len(current_list))
+
             case "LLEN":
                 current_list = state.list_store.get(lines[4], [])
-                response = f":{len(current_list)}\r\n".encode()
+                response = resp_int(len(current_list))
+
             case "LPOP":
                 current_list = state.list_store.get(lines[4], [])
                 print(f"LPOP: current_list: {current_list}")
                 if len(current_list) == 0:
-                    response = b"$-1\r\n"
+                    response = NULL_BULK_STRING
                 elif len(lines) >= 6:
                     values = []
                     for i in range(int(lines[6])):
@@ -162,9 +170,11 @@ async def handle_command(data, state) -> bytes:
                     response = resp_array_from_strings(values)
                 else:
                     value = current_list.pop(0)
-                    response = f"${len(value)}\r\n{value}\r\n".encode()
+                    response = bulk_string(value)
+
             case "BLPOP":
                 response = await blpop(lines[4], float(lines[6]), state)
+
             case "LRANGE":
                 current_list = state.list_store.get(lines[4], [])
                 lst_len = len(current_list)
@@ -173,10 +183,8 @@ async def handle_command(data, state) -> bytes:
                 start = check_range_negative(lst_len, start)
                 stop = check_range_negative(lst_len, stop)
 
-                if lst_len == 0:
-                    response = b"*0\r\n"
-                elif start >= lst_len:
-                    response = b"*0\r\n"
+                if lst_len == 0 or start >= lst_len:
+                    response = EMPTY_ARRAY
                 else:
                     if stop >= lst_len:
                        stop = lst_len - 1
@@ -219,7 +227,21 @@ async def handle_command(data, state) -> bytes:
                 for client in channel_clients:
                     client.send(channel_resp)
 
-                response = f":{len(channel_clients)}\r\n".encode()
+                response = resp_int(len(channel_clients))
+
+            case "ZADD":
+                set_name, score, member = lines[4], float(lines[6]), lines[8]
+                current_set = state.sorted_sets.get(set_name, [])
+
+                index = 0
+                if current_set:
+                    while score < current_set[index][1]:
+                        index += 1
+
+                current_set.insert(index, (member, score))
+
+                response = resp_int(len(current_set))
+
             case _:
                 response = b"-ERR unknown command\r\n"
 

@@ -56,7 +56,12 @@ class RESPSimpleString(RESPValue):
 def bulk_string(value: str) -> bytes:
     return f"${len(value)}\r\n{value}\r\n".encode()
 
+def resp_int(value: int) -> bytes:
+    return f":{value}\r\n".encode()
+
 def simple_string(value: str) -> bytes:
     return f"+{value}\r\n".encode()
 
+EMPTY_ARRAY = b"*0\r\n"
+NULL_BULK_STRING = b"$-1\r\n"
 OK_STRING = simple_string("OK")
