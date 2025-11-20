@@ -293,6 +293,22 @@ async def handle_command(data, state) -> bytes:
                 else:
                     response = NULL_BULK_STRING
 
+            case "ZREM":
+                set_name, member = lines[4], lines[6]
+                current_set = state.sorted_sets.get(set_name, [])
+
+                member_index = 0
+                while member_index < len(current_set) and member != current_set[member_index][0]:
+                    member_index += 1
+
+                if member_index < len(current_set):
+                    del current_set[member_index]
+                    response = resp_int(1)
+                else:
+                    response = resp_int(0)
+
+                state.sorted_sets[set_name] = current_set
+
             # Unknow Command
             case _:
                 response = b"-ERR unknown command\r\n"
