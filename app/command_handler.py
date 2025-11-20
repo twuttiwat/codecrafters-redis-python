@@ -278,6 +278,21 @@ async def handle_command(data, state) -> bytes:
                 current_set = state.sorted_sets.get(set_name, [])
                 response = resp_int(len(current_set))
 
+            case "ZSCORE":
+                set_name, member = lines[4], lines[6]
+                current_set = state.sorted_sets.get(set_name, [])
+                if current_set:
+                    member_index = 0
+                    while member_index < len(current_set) and member != current_set[member_index][0]:
+                        member_index += 1
+
+                    if member_index < len(current_set):
+                        response = bulk_string(str(current_set[member_index][1]))
+                    else:
+                        response = NULL_BULK_STRING
+                else:
+                    response = NULL_BULK_STRING
+
             # Unknow Command
             case _:
                 response = b"-ERR unknown command\r\n"
