@@ -3,6 +3,7 @@ import asyncio
 from dataclasses import dataclass
 
 from app.resp import EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_string
+from app.sorted_set import SortedSet
 
 @dataclass
 class State:
@@ -211,103 +212,56 @@ async def handle_command(data, state) -> bytes:
 
             case "ZADD":
                 set_name, score, member = lines[4], float(lines[6]), lines[8]
-                current_set = state.sorted_sets.get(set_name, [])
+                current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                index = 0
-                if current_set:
-                    new_member = True
+                response = resp_int(current_set.add((score, member)))
 
-                    member_index = 0
-                    while member_index < len(current_set) and member != current_set[member_index][0]:
-                        member_index += 1
-                    if member_index < len(current_set):
-                        del current_set[member_index]
-                        new_member = False
-
-                    while index < len(current_set) and (score > current_set[index][1] or (score == current_set[index][1] and member > current_set[index][0]) ):
-                        index += 1
-
-                    current_set.insert(index, (member, score))
-                    state.sorted_sets[set_name] = current_set
-
-                    response = resp_int(1) if new_member else resp_int(0)
-                else:
-                    current_set.insert(0, (member, score))
-                    state.sorted_sets[set_name] = current_set
-
-                    response = resp_int(1)
-
-                print(f"{set_name}: {current_set}")
+                state.sorted_sets[set_name] = current_set
 
             case "ZRANK":
                 set_name, member = lines[4], lines[6]
-                current_set = state.sorted_sets.get(set_name, [])
-                if current_set:
-                    member_index = 0
-                    while member_index < len(current_set) and member != current_set[member_index][0]:
-                        member_index += 1
+                current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                    if member_index < len(current_set):
-                        response = resp_int(member_index)
-                    else:
-                        response = NULL_BULK_STRING
-                else:
-                    response = NULL_BULK_STRING
+                rank = current_set.rank(member)
+
+                response = resp_int(rank) if (rank is not None) else NULL_BULK_STRING
 
             case "ZRANGE":
                 set_name, start, stop = lines[4], int(lines[6]), int(lines[8])
-                current_set = state.sorted_sets.get(set_name, [])
-                set_len = len(current_set)
+                current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                start = check_range_negative(set_len, start)
-                stop = check_range_negative(set_len, stop)
-
-                if set_len == 0 or start >= set_len:
-                    response = EMPTY_ARRAY
-                else:
-                    if stop >= set_len:
-                       stop = set_len - 1
-                    slice = current_set[start:stop + 1]
-
-                    members = [member for (member,_) in slice]
-
+                items = current_set.range(start, stop)
+                if items:
+                    members = [member for (_, member) in items]
                     response = resp_array_from_strings(members)
+                else:
+                    response = EMPTY_ARRAY
 
             case "ZCARD":
                 set_name = lines[4]
-                current_set = state.sorted_sets.get(set_name, [])
-                response = resp_int(len(current_set))
+                current_set = state.sorted_sets.get(set_name, SortedSet())
+                response = resp_int(current_set.count())
 
             case "ZSCORE":
                 set_name, member = lines[4], lines[6]
-                current_set = state.sorted_sets.get(set_name, [])
-                if current_set:
-                    member_index = 0
-                    while member_index < len(current_set) and member != current_set[member_index][0]:
-                        member_index += 1
+                current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                    if member_index < len(current_set):
-                        response = bulk_string(str(current_set[member_index][1]))
-                    else:
-                        response = NULL_BULK_STRING
+                score = current_set.score(member)
+                if score:
+                    response = bulk_string(str(score))
                 else:
                     response = NULL_BULK_STRING
 
             case "ZREM":
                 set_name, member = lines[4], lines[6]
-                current_set = state.sorted_sets.get(set_name, [])
+                current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                member_index = 0
-                while member_index < len(current_set) and member != current_set[member_index][0]:
-                    member_index += 1
-
-                if member_index < len(current_set):
-                    del current_set[member_index]
-                    response = resp_int(1)
-                else:
-                    response = resp_int(0)
+                response = resp_int(current_set.remove(member))
 
                 state.sorted_sets[set_name] = current_set
+
+            case "GEOADD":
+                response = resp_int(1)
 
             # Unknow Command
             case _:
