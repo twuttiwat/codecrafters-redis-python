@@ -254,6 +254,26 @@ async def handle_command(data, state) -> bytes:
                 else:
                     response = NULL_BULK_STRING
 
+            case "ZRANGE":
+                set_name, start, stop = lines[4], int(lines[6]), int(lines[8])
+                current_set = state.sorted_sets.get(set_name, [])
+                set_len = len(current_set)
+
+                # start = check_range_negative(lst_len, start)
+                # stop = check_range_negative(lst_len, stop)
+
+                if set_len == 0 or start >= set_len:
+                    response = EMPTY_ARRAY
+                else:
+                    if stop >= set_len:
+                       stop = set_len - 1
+                    slice = current_set[start:stop + 1]
+
+                    members = [member for (member,_) in slice]
+
+                    response = resp_array_from_strings(members)
+
+            # Unknow Command
             case _:
                 response = b"-ERR unknown command\r\n"
 
