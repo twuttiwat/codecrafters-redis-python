@@ -26,5 +26,8 @@ def resp_array_from_strings(values: list) -> bytes:
 def resp_int(value: int) -> bytes:
     return f":{value}\r\n".encode()
 
+def simple_error(value: str) -> bytes:
+    return f"-ERR {value}\r\n".encode()
+
 def simple_string(value: str) -> bytes:
     return f"+{value}\r\n".encode()

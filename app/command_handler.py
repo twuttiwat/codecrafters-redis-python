@@ -2,7 +2,7 @@ import socket
 import asyncio
 from dataclasses import dataclass
 
-from app.resp import EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_string
+from app.resp import EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
 
 @dataclass
@@ -46,7 +46,7 @@ async def handle_command(data, state) -> bytes:
 
         subscribed_commands = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"]
         if len(state.channels) > 0 and not command in subscribed_commands:
-            return f"-ERR Can't execute '{command}' in subscribed mode\r\n".encode()
+            return simple_error(f"Can't execute '{command}' in subscribed mode")
 
         if state.is_multi and command != "EXEC" and command != "DISCARD":
             state.command_queue.append(data)
@@ -88,7 +88,7 @@ async def handle_command(data, state) -> bytes:
                     state.store[key] = str(new_value)
                     response = resp_int(new_value)
                 else:
-                    response = b"-ERR value is not an integer or out of range\r\n"
+                    response = simple_error("value is not an integer or out of range")
 
             case "MULTI":
                 state.is_multi = True
@@ -96,7 +96,7 @@ async def handle_command(data, state) -> bytes:
 
             case "EXEC":
                 if not state.is_multi:
-                    response = b"-ERR EXEC without MULTI\r\n"
+                    response = simple_error("EXEC without MULTI")
                 elif not state.command_queue:
                     state.is_multi = False
                     response = EMPTY_ARRAY
@@ -111,7 +111,7 @@ async def handle_command(data, state) -> bytes:
 
             case "DISCARD":
                 if not state.is_multi:
-                    response = b"-ERR DISCARD without MULTI\r\n"
+                    response = simple_error("DISCARD without MULTI")
                 else:
                     state.is_multi = False
                     state.command_queue = []
@@ -261,11 +261,22 @@ async def handle_command(data, state) -> bytes:
                 state.sorted_sets[set_name] = current_set
 
             case "GEOADD":
-                response = resp_int(1)
+                loc_key, long, lat, member = lines[4], float(lines[6]), float(lines[8]), lines[10]
+
+                invalid_long =  long < -180 or long > 180
+                invalid_lat =  lat < -85.05112878 or lat > 85.05112878
+                if invalid_long and invalid_lat:
+                    response = simple_error("invalid longitude and latitude")
+                elif invalid_long:
+                    response = simple_error("invalid longitude")
+                elif invalid_lat:
+                    response = simple_error("invalid latitude")
+                else:
+                    response = resp_int(1)
 
             # Unknow Command
             case _:
-                response = b"-ERR unknown command\r\n"
+                response = simple_error("unknown command")
 
         return response
     else:
