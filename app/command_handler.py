@@ -273,6 +273,11 @@ async def handle_command(data, state) -> bytes:
 
                     response = resp_array_from_strings(members)
 
+            case "ZCARD":
+                set_name = lines[4]
+                current_set = state.sorted_sets.get(set_name, [])
+                response = resp_int(len(current_set))
+
             # Unknow Command
             case _:
                 response = b"-ERR unknown command\r\n"
