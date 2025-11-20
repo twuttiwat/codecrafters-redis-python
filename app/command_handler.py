@@ -259,8 +259,8 @@ async def handle_command(data, state) -> bytes:
                 current_set = state.sorted_sets.get(set_name, [])
                 set_len = len(current_set)
 
-                # start = check_range_negative(lst_len, start)
-                # stop = check_range_negative(lst_len, stop)
+                start = check_range_negative(set_len, start)
+                stop = check_range_negative(set_len, stop)
 
                 if set_len == 0 or start >= set_len:
                     response = EMPTY_ARRAY
