@@ -272,7 +272,10 @@ async def handle_command(data, state) -> bytes:
                 elif invalid_lat:
                     response = simple_error("invalid latitude")
                 else:
-                    response = resp_int(1)
+                    current_set = state.sorted_sets.get(loc_key, SortedSet())
+                    response = resp_int(current_set.add((0, member)))
+
+                    state.sorted_sets[loc_key] = current_set
 
             # Unknow Command
             case _:
