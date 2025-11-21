@@ -2,8 +2,10 @@ import socket
 import asyncio
 from dataclasses import dataclass
 
+import app.geo as geo
 from app.resp import EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
+
 
 @dataclass
 class State:
@@ -17,8 +19,10 @@ class State:
     command_queue: list
     schedule_remove: object
 
+
 def check_range_negative(lst_len, value):
     return max(lst_len + value, 0) if value < 0 else value
+
 
 async def blpop(list_name: str, timeout: float, state):
     timeout = None if timeout == 0.0 else timeout
@@ -38,6 +42,7 @@ async def blpop(list_name: str, timeout: float, state):
     except asyncio.TimeoutError:
         print(f"Block timeout after {timeout} seconds")
         return b"*-1\r\n"
+
 
 async def handle_command(data, state) -> bytes:
     if data.startswith("*"):
@@ -263,8 +268,8 @@ async def handle_command(data, state) -> bytes:
             case "GEOADD":
                 loc_key, long, lat, member = lines[4], float(lines[6]), float(lines[8]), lines[10]
 
-                invalid_long =  long < -180 or long > 180
-                invalid_lat =  lat < -85.05112878 or lat > 85.05112878
+                invalid_long = not geo.validate_long(long)
+                invalid_lat = not geo.validate_lat(lat)
                 if invalid_long and invalid_lat:
                     response = simple_error("invalid longitude and latitude")
                 elif invalid_long:
@@ -273,7 +278,8 @@ async def handle_command(data, state) -> bytes:
                     response = simple_error("invalid latitude")
                 else:
                     current_set = state.sorted_sets.get(loc_key, SortedSet())
-                    response = resp_int(current_set.add((0, member)))
+                    score = geo.encode(lat, long)
+                    response = resp_int(current_set.add((score, member)))
 
                     state.sorted_sets[loc_key] = current_set
 
