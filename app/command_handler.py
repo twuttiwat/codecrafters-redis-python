@@ -342,6 +342,13 @@ async def handle_command(data, state) -> bytes:
                             places_in_radius.append(member)
                     response = resp_array_from_strings(places_in_radius)
 
+            case "ACL":
+                sub_command = lines[4]
+                if sub_command == "WHOAMI":
+                    response = bulk_string("default")
+                else
+                    response = NULL_BULK_STRING
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
