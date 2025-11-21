@@ -326,6 +326,22 @@ async def handle_command(data, state) -> bytes:
 
                     response = bulk_string(str(geo.haversine(lat1, long1, lat2, long2)))
 
+            # GEOSEARCH places FROMLONLAT 2 48 BYRADIUS 100000 m
+            case "GEOSEARCH":
+                loc_key, lon, lat, radius, unit = lines[4], float(lines[8]), float(lines[10]), float(lines[14]), lines[16]
+
+                current_set = state.sorted_sets.get(loc_key, SortedSet())
+                if current_set.count() == 0:
+                    response = EMPTY_ARRAY
+                else:
+                    places_in_radius = []
+                    for score, member in current_set.items:
+                        member_lat, member_lon = geo.decode(score)
+                        dist_in_m = geo.haversine(lat, lon, member_lat, member_lon)
+                        if dist_in_m <= radius:
+                            places_in_radius.append(member)
+                    response = resp_array_from_strings(places_in_radius)
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
