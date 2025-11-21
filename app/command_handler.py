@@ -278,6 +278,7 @@ async def handle_command(data, state) -> bytes:
                     response = simple_error("invalid latitude")
                 else:
                     current_set = state.sorted_sets.get(loc_key, SortedSet())
+                    print(f"GEOADD lat long: {lat} {long}")
                     score = geo.encode(lat, long)
                     response = resp_int(current_set.add((score, member)))
 
@@ -302,7 +303,10 @@ async def handle_command(data, state) -> bytes:
                     for member in members:
                         score = current_set.score(member)
                         if score is not None:
-                            member_responses.append( resp_array_from_strings(["0", "0"]) )
+                            score = int(current_set.score(member))
+                            lat, long = geo.decode(score)
+                            print(f"GEOPOS lat long: {lat} {long}")
+                            member_responses.append( resp_array_from_strings([str(long), str(lat)]) )
                         else:
                             member_responses.append( NULL_ARRAY )
                     response = resp_array(member_responses)
