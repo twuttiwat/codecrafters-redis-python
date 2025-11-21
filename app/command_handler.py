@@ -311,6 +311,21 @@ async def handle_command(data, state) -> bytes:
                             member_responses.append( NULL_ARRAY )
                     response = resp_array(member_responses)
 
+            case "GEODIST":
+                loc_key, member1, member2 = lines[4], lines[6], lines[8]
+
+                current_set = state.sorted_sets.get(loc_key, SortedSet())
+                if current_set.count() == 0:
+                    response = NULL_BULK_STRING
+                else:
+                    score1 = int(current_set.score(member1))
+                    lat1, long1 = geo.decode(score1)
+
+                    score2 = int(current_set.score(member2))
+                    lat2, long2 = geo.decode(score2)
+
+                    response = bulk_string(str(geo.haversine(lat1, long1, lat2, long2)))
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")

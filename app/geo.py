@@ -1,3 +1,5 @@
+from math import radians, sin, cos, sqrt, asin
+
 MIN_LATITUDE = -85.05112878
 MAX_LATITUDE = 85.05112878
 MIN_LONGITUDE = -180
@@ -64,6 +66,18 @@ def encode(latitude: float, longitude: float) -> int:
 
     return interleave(normalized_latitude, normalized_longitude)
 
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6372797.560856 # Earth radius in kilometers
+
+    dLat = radians(lat2 - lat1)
+    dLon = radians(lon2 - lon1)
+    lat1 = radians(lat1)
+    lat2 = radians(lat2)
+
+    a = sin(dLat / 2)**2 + cos(lat1) * cos(lat2) * sin(dLon / 2)**2
+    c = 2 * asin(sqrt(a))
+
+    return R * c
 
 def interleave(x: int, y: int) -> int:
     x = spread_int32_to_int64(x)
