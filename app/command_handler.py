@@ -346,7 +346,7 @@ async def handle_command(data, state) -> bytes:
                 sub_command = lines[4]
                 if sub_command == "WHOAMI":
                     response = bulk_string("default")
-                else
+                else:
                     response = NULL_BULK_STRING
 
             # Unknow Command
