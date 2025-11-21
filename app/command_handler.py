@@ -346,6 +346,9 @@ async def handle_command(data, state) -> bytes:
                 sub_command = lines[4]
                 if sub_command == "WHOAMI":
                     response = bulk_string("default")
+                elif sub_command == "GETUSER":
+                    user = lines[6]
+                    response = resp_array([bulk_string("flags"), EMPTY_ARRAY])
                 else:
                     response = NULL_BULK_STRING
 
