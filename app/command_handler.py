@@ -3,7 +3,7 @@ import asyncio
 from dataclasses import dataclass
 
 import app.geo as geo
-from app.resp import EMPTY_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
+from app.resp import EMPTY_ARRAY, NULL_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
 
 
@@ -282,6 +282,30 @@ async def handle_command(data, state) -> bytes:
                     response = resp_int(current_set.add((score, member)))
 
                     state.sorted_sets[loc_key] = current_set
+
+            case "GEOPOS":
+                loc_key = lines[4]
+
+                # Get list of members
+                members = []
+                member_index = 6
+                while member_index < len(lines):
+                    members.append( lines[member_index] )
+                    member_index += 2
+
+                current_set = state.sorted_sets.get(loc_key, SortedSet())
+                if current_set.count() == 0:
+                    null_responses = [ NULL_ARRAY for _ in range(1, len(members) + 1) ]
+                    response = resp_array(null_responses)
+                else:
+                    member_responses = []
+                    for member in members:
+                        score = current_set.score(member)
+                        if score is not None:
+                            member_responses.append( resp_array_from_strings(["0", "0"]) )
+                        else:
+                            member_responses.append( NULL_ARRAY )
+                    response = resp_array(member_responses)
 
             # Unknow Command
             case _:

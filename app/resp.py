@@ -1,4 +1,5 @@
 EMPTY_ARRAY = b"*0\r\n"
+NULL_ARRAY = b"*-1\r\n"
 NULL_BULK_STRING = b"$-1\r\n"
 OK_STRING = b"+OK\r\n"
 
@@ -31,3 +32,4 @@ def simple_error(value: str) -> bytes:
 
 def simple_string(value: str) -> bytes:
     return f"+{value}\r\n".encode()
+
