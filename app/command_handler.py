@@ -7,7 +7,6 @@ import app.geo as geo
 from app.resp import EMPTY_ARRAY, NULL_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
 
-
 @dataclass
 class State:
     store: dict
@@ -15,7 +14,9 @@ class State:
     shared_channels: dict
     sorted_sets: dict
     channels: dict
+    default_user_flags: list
     default_passwords: list
+    current_user: str
     connection: socket
     is_multi: bool
     command_queue: list
@@ -347,23 +348,28 @@ async def handle_command(data, state) -> bytes:
             case "ACL":
                 sub_command = lines[4]
                 if sub_command == "WHOAMI":
-                    response = bulk_string("default")
+                    if state.current_user:
+                        response = bulk_string("default")
+                    else:
+                        response = b"-NOAUTH Authentication required.\r\n"
                 elif sub_command == "GETUSER":
                     user = lines[6]
 
+                    user_flags = resp_array_from_strings(state.default_user_flags) if state.default_user_flags else EMPTY_ARRAY
                     if state.default_passwords:
                         passwords_array = resp_array_from_strings(state.default_passwords)
-                        response = resp_array([bulk_string("flags"), EMPTY_ARRAY,
+                        response = resp_array([bulk_string("flags"), user_flags,
                                                bulk_string("passwords"), passwords_array])
                     else:
-                        user_props = resp_array_from_strings(["nopass"])
-                        response = resp_array([bulk_string("flags"), user_props,
+                        response = resp_array([bulk_string("flags"), user_flags,
                                                bulk_string("passwords"), EMPTY_ARRAY])
                 elif sub_command == "SETUSER":
                     user, password = lines[6], lines[8].removeprefix(">")
 
                     password_hash = hashlib.sha256(password.encode()).hexdigest()
                     state.default_passwords.append(password_hash)
+
+                    state.default_user_flags = []
 
                     response = OK_STRING
                 else:

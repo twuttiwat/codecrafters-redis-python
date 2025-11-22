@@ -26,13 +26,18 @@ async def start():
     shared_list_store = {}
     shared_sorted_sets = {}
     my_shared_channels = {}
+    user_flags = {"nopass"}
+    passwords = []
+    default_user = "default"
 
     while True:
         my_connection, _ = await asyncio.get_event_loop().sock_accept(server_socket)  # wait for client
         loop = asyncio.get_event_loop()
         client_channels = {}
+        my_current_user = default_user if not passwords else None
         state = State(store = shared_store, list_store = shared_list_store, shared_channels = my_shared_channels,
-                      sorted_sets = shared_sorted_sets, default_passwords = [], channels = client_channels, connection = my_connection,
+                      sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
+                      current_user = my_current_user, channels = client_channels, connection = my_connection,
                       is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, shared_store.pop, k))
         asyncio.create_task(handle_client(state))
 
