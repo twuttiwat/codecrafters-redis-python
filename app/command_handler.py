@@ -52,6 +52,9 @@ async def handle_command(data, state) -> bytes:
         lines = data.split("\r\n")
         command = lines[2].upper()
 
+        if command != "AUTH" and state.current_user is None:
+            return b"-NOAUTH Authentication required.\r\n"
+
         subscribed_commands = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"]
         if len(state.channels) > 0 and not command in subscribed_commands:
             return simple_error(f"Can't execute '{command}' in subscribed mode")
@@ -382,6 +385,7 @@ async def handle_command(data, state) -> bytes:
                     password_hash = hashlib.sha256(password.encode()).hexdigest()
                     existing_password = state.default_passwords[0]
                     if password_hash == existing_password:
+                        state.current_user = "default"
                         response = OK_STRING
                     else:
                         response = b"-WRONGPASS\r\n"
