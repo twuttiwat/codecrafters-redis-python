@@ -369,6 +369,19 @@ async def handle_command(data, state) -> bytes:
                 else:
                     response = NULL_BULK_STRING
 
+            case "AUTH":
+                password = lines[6]
+
+                if state.default_passwords:
+                    password_hash = hashlib.sha256(password.encode()).hexdigest()
+                    existing_password = state.default_passwords[0]
+                    if password_hash == existing_password:
+                        response = OK_STRING
+                    else:
+                        response = b"-WRONGPASS\r\n"
+                else:
+                    response = simple_error("WRONGPASS")
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
