@@ -349,7 +349,8 @@ async def handle_command(data, state) -> bytes:
                 elif sub_command == "GETUSER":
                     user = lines[6]
                     user_props = resp_array_from_strings(["nopass"])
-                    response = resp_array([bulk_string("flags"), user_props])
+                    response = resp_array([bulk_string("flags"), user_props,
+                                           bulk_string("passwords"), EMPTY_ARRAY])
                 else:
                     response = NULL_BULK_STRING
 
