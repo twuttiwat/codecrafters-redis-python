@@ -91,6 +91,14 @@ async def handle_command(data, state) -> bytes:
                 else:
                     response = NULL_BULK_STRING
 
+            case "TYPE":
+                key = lines[4]
+                value = state.store.get(key, None)
+                if value is not None:
+                    response = simple_string("string")
+                else:
+                    response = simple_string("none")
+
             case "INCR":
                 key = lines[4]
                 value = state.store.get(key, "0")
