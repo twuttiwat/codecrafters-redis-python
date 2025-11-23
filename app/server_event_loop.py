@@ -23,6 +23,7 @@ async def start():
     server_socket.setblocking(False)
 
     shared_store = {}
+    shared_streams = {}
     shared_list_store = {}
     shared_sorted_sets = {}
     my_shared_channels = {}
@@ -35,7 +36,7 @@ async def start():
         loop = asyncio.get_event_loop()
         client_channels = {}
         my_current_user = default_user if not passwords else None
-        state = State(store = shared_store, list_store = shared_list_store, shared_channels = my_shared_channels,
+        state = State(store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
                       sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
                       current_user = my_current_user, channels = client_channels, connection = my_connection,
                       is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, shared_store.pop, k))

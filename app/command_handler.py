@@ -10,6 +10,7 @@ from app.sorted_set import SortedSet
 @dataclass
 class State:
     store: dict
+    streams: dict
     list_store: dict
     shared_channels: dict
     sorted_sets: dict
@@ -91,14 +92,6 @@ async def handle_command(data, state) -> bytes:
                 else:
                     response = NULL_BULK_STRING
 
-            case "TYPE":
-                key = lines[4]
-                value = state.store.get(key, None)
-                if value is not None:
-                    response = simple_string("string")
-                else:
-                    response = simple_string("none")
-
             case "INCR":
                 key = lines[4]
                 value = state.store.get(key, "0")
@@ -108,6 +101,24 @@ async def handle_command(data, state) -> bytes:
                     response = resp_int(new_value)
                 else:
                     response = simple_error("value is not an integer or out of range")
+
+            case "TYPE":
+                key = lines[4]
+                value = state.store.get(key, None)
+                if value is not None:
+                    response = simple_string("string")
+                elif key in state.streams:
+                    response = simple_string("stream")
+                else:
+                    response = simple_string("none")
+
+            case "XADD":
+                stream_key, entry_id = lines[4], lines[6]
+
+                stream = state.streams.get(stream_key, {})
+                state.streams[stream_key] = stream
+
+                response = bulk_string(entry_id)
 
             case "MULTI":
                 state.is_multi = True
