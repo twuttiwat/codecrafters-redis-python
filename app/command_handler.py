@@ -6,7 +6,7 @@ import socket
 import app.geo as geo
 from app.resp import EMPTY_ARRAY, NULL_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
-from app.stream import validate_entry_id
+from app.stream import validate_entry_id, generate_entry_id
 
 
 @dataclass
@@ -123,6 +123,8 @@ async def handle_command(data, state) -> bytes:
                 is_valid, validate_err = validate_entry_id(last_entry_id, entry_id)
                 if not is_valid:
                     return simple_error(validate_err)
+
+                entry_id = generate_entry_id(stream, entry_id)
 
                 stream.append(entry_id)
                 state.streams[stream_key] = stream
