@@ -6,6 +6,8 @@ import socket
 import app.geo as geo
 from app.resp import EMPTY_ARRAY, NULL_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
+from app.stream import validate_entry_id
+
 
 @dataclass
 class State:
@@ -115,7 +117,14 @@ async def handle_command(data, state) -> bytes:
             case "XADD":
                 stream_key, entry_id = lines[4], lines[6]
 
-                stream = state.streams.get(stream_key, {})
+                stream = state.streams.get(stream_key, [])
+
+                last_entry_id = stream[-1] if stream else None
+                is_valid, validate_err = validate_entry_id(last_entry_id, entry_id)
+                if not is_valid:
+                    return simple_error(validate_err)
+
+                stream.append(entry_id)
                 state.streams[stream_key] = stream
 
                 response = bulk_string(entry_id)
