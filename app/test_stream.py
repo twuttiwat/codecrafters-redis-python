@@ -1,5 +1,8 @@
 import stream
 
+#
+# validate_entry_id
+#
 def test_validate_entry_id_with_first_entry_id():
     """First entry_id should work"""
     actual = stream.validate_entry_id(None, "1-1")
@@ -30,6 +33,9 @@ def test_validate_entry_id_with_min_entry_id():
     assert actual == (False, stream.ENTRY_ID_GT_0_0)
 
 
+#
+# generate_seq_num
+#
 def test_generate_seq_num_with_no_prior_entries():
     """Sequence Number with no prior entries should be 1"""
     actual = stream.generate_seq_num([], "0-*")
@@ -40,6 +46,5 @@ def test_generate_seq_num_with_prior_entries():
     """Sequence Number with no prior entries should be 1"""
     actual = stream.generate_seq_num([], "5-*")
     assert actual == 0
-
 
 
