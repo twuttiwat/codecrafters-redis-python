@@ -52,6 +52,9 @@ async def blpop(list_name: str, timeout: float, state):
 
 async def xread_block(timeout, state, stream_key, start_entry):
     timeout = None if timeout == 0.0 else timeout
+    if start_entry == "$":
+        stream = state.streams.get(stream_key, [])
+        start_entry = stream[-1]["id"] if stream else "0-0"
     try:
         async with asyncio.timeout(timeout):
             while True:
