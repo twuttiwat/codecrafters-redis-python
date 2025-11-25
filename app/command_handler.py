@@ -46,7 +46,37 @@ async def blpop(list_name: str, timeout: float, state):
                     print(f"response: {response}")
                     return response
     except asyncio.TimeoutError:
-        print(f"Block timeout after {timeout} seconds")
+        print(f"BLPOP Block timeout after {timeout} seconds")
+        return b"*-1\r\n"
+
+
+async def xread_block(timeout, state, stream_key, start_entry):
+    timeout = None if timeout == 0.0 else timeout
+    try:
+        async with asyncio.timeout(timeout):
+            while True:
+                stream = state.streams.get(stream_key, [])
+
+                read_entries = []
+                for entry in stream:
+                    if entry["id"] > start_entry:
+                        read_entries.append(entry)
+
+                if len(read_entries) == 0:
+                    print(f"XREAD BLOCK: No entries in stream")
+                    await asyncio.sleep(0.01)
+                else:
+                    print(f"XREAD BLOCK: {read_entries}")
+
+                    resp_entries = []
+                    for entry in read_entries:
+                        key_values_arr = resp_array_from_strings(entry["key_values"])
+                        resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
+
+                    return resp_array([resp_array([bulk_string(stream_key), resp_array(resp_entries)])])
+
+    except asyncio.TimeoutError:
+        print(f"XREAD BLOCK timeout after {timeout} seconds")
         return b"*-1\r\n"
 
 
@@ -220,6 +250,11 @@ async def handle_command(data, state) -> bytes:
                             result_entries.append( resp_array([bulk_string(stream_key), resp_array(resp_entries)]) )
 
                         response = resp_array(result_entries)
+
+                    case "BLOCK":
+                        timeout_ms, stream_key, start_entry = int(lines[6]), lines[10], lines[12]
+                        print(f"XREAD BLOCK: timeout {timeout_ms}, key {stream_key}, entry {start_entry}")
+                        response = await xread_block(timeout_ms / 1000.0, state, stream_key, start_entry)
 
             case "MULTI":
                 state.is_multi = True
