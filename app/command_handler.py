@@ -174,20 +174,52 @@ async def handle_command(data, state) -> bytes:
                 response = resp_array(resp_entries)
 
             case "XREAD":
-                stream_key, start_entry = lines[6], lines[8]
-                stream = state.streams.get(stream_key, [])
+                sub_command = lines[4]
+                match sub_command.upper():
+                    case "STREAM":
+                        stream_key, start_entry = lines[6], lines[8]
+                        stream = state.streams.get(stream_key, [])
 
-                read_entries = []
-                for entry in stream:
-                    if entry["id"] > start_entry:
-                        read_entries.append(entry)
+                        read_entries = []
+                        for entry in stream:
+                            if entry["id"] > start_entry:
+                                read_entries.append(entry)
 
-                resp_entries = []
-                for entry in read_entries:
-                    key_values_arr = resp_array_from_strings(entry["key_values"])
-                    resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
+                        resp_entries = []
+                        for entry in read_entries:
+                            key_values_arr = resp_array_from_strings(entry["key_values"])
+                            resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
 
-                response = resp_array([ resp_array([bulk_string(stream_key), resp_array(resp_entries)]) ])
+                        response = resp_array([ resp_array([bulk_string(stream_key), resp_array(resp_entries)]) ])
+                    case "STREAMS":
+                        key_and_ids = []
+                        index = 6
+                        while index < len(lines):
+                            key_and_ids.append(lines[index])
+                            index += 2
+
+                        key_id_pairs = []
+                        for i in range(0, len(key_and_ids) // 2):
+                            stream_key, entry_id = key_and_ids[i], key_and_ids[i + len(key_and_ids) // 2]
+                            key_id_pairs.append((stream_key, entry_id))
+
+                        result_entries = []
+                        for stream_key, start_entry in key_id_pairs:
+                            stream = state.streams.get(stream_key, [])
+
+                            read_entries = []
+                            for entry in stream:
+                                if entry["id"] > start_entry:
+                                    read_entries.append(entry)
+
+                            resp_entries = []
+                            for entry in read_entries:
+                                key_values_arr = resp_array_from_strings(entry["key_values"])
+                                resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
+
+                            result_entries.append( resp_array([bulk_string(stream_key), resp_array(resp_entries)]) )
+
+                        response = resp_array(result_entries)
 
             case "MULTI":
                 state.is_multi = True
