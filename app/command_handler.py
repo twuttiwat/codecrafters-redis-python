@@ -173,6 +173,22 @@ async def handle_command(data, state) -> bytes:
 
                 response = resp_array(resp_entries)
 
+            case "XREAD":
+                stream_key, start_entry = lines[6], lines[8]
+                stream = state.streams.get(stream_key, [])
+
+                read_entries = []
+                for entry in stream:
+                    if entry["id"] > start_entry:
+                        read_entries.append(entry)
+
+                resp_entries = []
+                for entry in read_entries:
+                    key_values_arr = resp_array_from_strings(entry["key_values"])
+                    resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
+
+                response = resp_array([ resp_array([bulk_string(stream_key), resp_array(resp_entries)]) ])
+
             case "MULTI":
                 state.is_multi = True
                 response = OK_STRING
