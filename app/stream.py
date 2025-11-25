@@ -9,7 +9,7 @@ MIN_ENTRY_ID = "0-0"
 #
 # Interface
 #
-def validate_entry_id(last_entry_id: str, entry_id: str) -> (bool, str):
+def validate_entry_id(last_entry_id: str, entry_id: str) -> tuple[bool, str]:
     last_entry_id = "0-0" if last_entry_id is None else last_entry_id
 
     if "*" in entry_id:
@@ -18,13 +18,14 @@ def validate_entry_id(last_entry_id: str, entry_id: str) -> (bool, str):
     if cmp_entry_id(MIN_ENTRY_ID, entry_id) >= 0:
         return (False, ENTRY_ID_GT_0_0)
 
+    print(f"validate last_entry_id: {last_entry_id}")
     if cmp_entry_id(last_entry_id, entry_id) < 0:
         return (True, None)
     else:
         return (False, ENTRY_ID_EQ_SMALLER)
 
 
-def generate_entry_id(entry_ids: list[str], entry_id: str) -> int:
+def generate_entry_id(entry_ids: list[str], entry_id: str) -> str:
     if entry_id == "*":
         return generate_auto_entry_id(entry_ids)
 

@@ -116,20 +116,60 @@ async def handle_command(data, state) -> bytes:
 
             case "XADD":
                 stream_key, entry_id = lines[4], lines[6]
+                key_values = []
+                index = 8
+                while index + 2 < len(lines):
+                    key, value = lines[index], lines[index + 2]
+                    key_values.extend([key, value])
+                    index += 2
 
                 stream = state.streams.get(stream_key, [])
 
-                last_entry_id = stream[-1] if stream else None
+                print(f"stream: {stream}")
+                last_entry_id = stream[-1]["id"] if (len(stream) > 0) else None
+                print(f"last_entry_id: {last_entry_id}")
                 is_valid, validate_err = validate_entry_id(last_entry_id, entry_id)
                 if not is_valid:
                     return simple_error(validate_err)
 
-                entry_id = generate_entry_id(stream, entry_id)
+                entry_ids = [entry["id"] for entry in stream]
+                entry_id = generate_entry_id(entry_ids, entry_id)
 
-                stream.append(entry_id)
+                new_entry = {
+                    "id": entry_id,
+                    "key_values": key_values
+                }
+
+                stream.append(new_entry)
                 state.streams[stream_key] = stream
 
                 response = bulk_string(entry_id)
+
+            case "XRANGE":
+                stream_key, start_entry, end_entry = lines[4], lines[6], lines[8]
+                stream = state.streams.get(stream_key, [])
+
+                if "-" not in start_entry:
+                    start_entry = start_entry + "-0"
+
+                if "-" not in end_entry:
+                    end_max_seq = "0"
+                    for entry_id in stream:
+                        if entry_id.startswith(end_entry):
+                            end_max_seq = entry_id.split("-")[1]
+                    end_entry = end_entry + "-" + end_max_seq
+
+                range_entries = []
+                for entry in stream:
+                    if start_entry <= entry["id"] and entry["id"] <= end_entry:
+                        range_entries.append(entry)
+
+                resp_entries = []
+                for entry in range_entries:
+                    key_values_arr = resp_array_from_strings(entry["key_values"])
+                    resp_entries.append( resp_array([bulk_string(entry["id"]), key_values_arr]) )
+
+                response = resp_array(resp_entries)
 
             case "MULTI":
                 state.is_multi = True
