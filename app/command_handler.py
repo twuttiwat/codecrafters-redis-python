@@ -152,7 +152,9 @@ async def handle_command(data, state) -> bytes:
                 if "-" not in start_entry:
                     start_entry = start_entry + "-0"
 
-                if "-" not in end_entry:
+                if end_entry == "+":
+                    end_entry = stream[-1]["id"] if stream else "0-0"
+                elif "-" not in end_entry:
                     end_max_seq = "0"
                     for entry_id in stream:
                         if entry_id.startswith(end_entry):
