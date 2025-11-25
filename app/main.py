@@ -1,8 +1,12 @@
 import asyncio
-# from .server_thread import start
+import argparse
+
 from .server_event_loop import start
 
 
 if __name__ == "__main__":
-    # start()
-    asyncio.run(start())
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", default=6379)
+    args = parser.parse_args()
+
+    asyncio.run(start(args))

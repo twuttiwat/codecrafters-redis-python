@@ -16,10 +16,10 @@ async def handle_client(state):
         print(f"response: {response}")
         state.connection.send(response)
 
-async def start():
-    print("Redis EventLoop Start!")
+async def start(args):
+    print(f"Redis EventLoop Start! on port {args.port}")
 
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
+    server_socket = socket.create_server(("localhost", int(args.port)), reuse_port=True)
     server_socket.setblocking(False)
 
     shared_store = {}

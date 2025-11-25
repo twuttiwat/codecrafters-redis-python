@@ -79,7 +79,7 @@ async def xread_block(timeout, state, stream_key, start_entry):
                     return resp_array([resp_array([bulk_string(stream_key), resp_array(resp_entries)])])
 
     except asyncio.TimeoutError:
-        print(f"XREAD BLOCK timeout after {timeout} seconds")
+        # print(f"XREAD BLOCK timeout after {timeout} seconds")
         return b"*-1\r\n"
 
 
