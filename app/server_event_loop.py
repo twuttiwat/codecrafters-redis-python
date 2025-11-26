@@ -17,29 +17,22 @@ async def handle_client(state):
         print(f"response: {response}")
         state.connection.send(response)
 
+
 async def handshake_master(master_host, master_port, listening_port):
     master_reader, master_writer = await asyncio.open_connection(master_host, master_port)
 
-    # PING
-    master_writer.write(resp_array_from_strings(["PING"]))
-    await master_writer.drain()
-    data = await master_reader.read(100)
-    print(f"Received {data.decode()}")
+    async def send_recv_cmd(cmd):
+        cmd_arr = cmd.split(" ")
+        master_writer.write(resp_array_from_strings(["PING"]))
+        await master_writer.drain()
+        data = await master_reader.read(100)
+        # print(f"Received {data.decode()}")
+        return data
 
-    # REPLCONF 1st
-    replconf_port = resp_array_from_strings([ "REPLCONF", "listening-port", listening_port ])
-    master_writer.write(replconf_port)
-    await master_writer.drain()
-    data = await master_reader.read(100)
-    print(f"Received {data.decode()}")
-
-    # REPLCONF 2nd
-    replconf_capa = resp_array_from_strings([ "REPLCONF", "capa", "psync2" ])
-    master_writer.write(replconf_capa)
-    await master_writer.drain()
-    data = await master_reader.read(100)
-    print(f"Received {data.decode()}")
-
+    send_recv_cmd("PING")
+    send_recv_cmd(f"REPLCONF listening-port {listening_port}")
+    send_recv_cmd("REPLCONF capa psync2")
+    send_recv_cmd("PSYNC ? -1")
 
 
 async def start(args):

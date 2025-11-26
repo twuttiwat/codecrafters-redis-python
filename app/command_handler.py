@@ -566,6 +566,10 @@ async def handle_command(data, state) -> bytes:
             case "REPLCONF":
                 response = OK_STRING
 
+            case "PSYNC":
+                replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+                response = simple_string(f"+FULLRESYNC {repl_id} 0")
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
