@@ -550,6 +550,14 @@ async def handle_command(data, state) -> bytes:
                 else:
                     response = simple_error("WRONGPASS")
 
+            case "INFO":
+                sub_command = lines[4]
+                match sub_command.upper():
+                    case "REPLICATION":
+                        response = bulk_string("role:master")
+                    case _:
+                        response = simple_error("Unknow INFO sub-command")
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
