@@ -17,6 +17,31 @@ async def handle_client(state):
         print(f"response: {response}")
         state.connection.send(response)
 
+async def handshake_master(master_host, master_port, listening_port):
+    master_reader, master_writer = await asyncio.open_connection(master_host, master_port)
+
+    # PING
+    master_writer.write(resp_array_from_strings(["PING"]))
+    await master_writer.drain()
+    data = await master_reader.read(100)
+    print(f"Received {data.decode()}")
+
+    # REPLCONF 1st
+    replconf_port = resp_array_from_strings([ "REPLCONF", "listening-port", listening_port ])
+    master_writer.write(replconf_port)
+    await master_writer.drain()
+    data = await master_reader.read(100)
+    print(f"Received {data.decode()}")
+
+    # REPLCONF 2nd
+    replconf_capa = resp_array_from_strings([ "REPLCONF", "capa", "psync2" ])
+    master_writer.write(replconf_capa)
+    await master_writer.drain()
+    data = await master_reader.read(100)
+    print(f"Received {data.decode()}")
+
+
+
 async def start(args):
     print(f"Redis EventLoop Start! on port {args.port}")
 
@@ -42,10 +67,6 @@ async def start(args):
 
     # Handshake with master server if slave
     if my_role == "slave":
-        reader, writer = await asyncio.open_connection(master_host, master_port)
-        writer.write(resp_array_from_strings(["PING"]))
-        await writer.drain()
-
     while True:
         my_connection, _ = await asyncio.get_event_loop().sock_accept(server_socket)  # wait for client
         loop = asyncio.get_event_loop()

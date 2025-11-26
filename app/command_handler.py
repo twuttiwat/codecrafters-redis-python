@@ -563,6 +563,9 @@ async def handle_command(data, state) -> bytes:
                     case _:
                         response = simple_error("Unknow INFO sub-command")
 
+            case "REPLCONF":
+                response = OK_STRING
+
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
