@@ -29,10 +29,10 @@ async def handshake_master(master_host, master_port, listening_port):
         # print(f"Received {data.decode()}")
         return data
 
-    send_recv_cmd("PING")
-    send_recv_cmd(f"REPLCONF listening-port {listening_port}")
-    send_recv_cmd("REPLCONF capa psync2")
-    send_recv_cmd("PSYNC ? -1")
+    await send_recv_cmd("PING")
+    await send_recv_cmd(f"REPLCONF listening-port {listening_port}")
+    await send_recv_cmd("REPLCONF capa psync2")
+    await send_recv_cmd("PSYNC ? -1")
 
 
 async def start(args):
