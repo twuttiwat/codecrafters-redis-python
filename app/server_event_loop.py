@@ -67,6 +67,8 @@ async def start(args):
 
     # Handshake with master server if slave
     if my_role == "slave":
+        await handshake_master(master_host,master_port, args.port)
+
     while True:
         my_connection, _ = await asyncio.get_event_loop().sock_accept(server_socket)  # wait for client
         loop = asyncio.get_event_loop()
