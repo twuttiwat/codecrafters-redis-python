@@ -22,6 +22,9 @@ async def start(args):
     server_socket = socket.create_server(("localhost", int(args.port)), reuse_port=True)
     server_socket.setblocking(False)
 
+    my_role = "master" if args.replicaof is None else "slave"
+    print(my_role)
+
     shared_store = {}
     shared_streams = {}
     shared_list_store = {}
@@ -36,7 +39,7 @@ async def start(args):
         loop = asyncio.get_event_loop()
         client_channels = {}
         my_current_user = default_user if not passwords else None
-        state = State(store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
+        state = State(role = my_role, store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
                       sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
                       current_user = my_current_user, channels = client_channels, connection = my_connection,
                       is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, shared_store.pop, k))

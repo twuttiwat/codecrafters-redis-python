@@ -11,6 +11,7 @@ from app.stream import validate_entry_id, generate_entry_id
 
 @dataclass
 class State:
+    role: str
     store: dict
     streams: dict
     list_store: dict
@@ -554,7 +555,7 @@ async def handle_command(data, state) -> bytes:
                 sub_command = lines[4]
                 match sub_command.upper():
                     case "REPLICATION":
-                        response = bulk_string("role:master")
+                        response = bulk_string(f"role:{state.role}")
                     case _:
                         response = simple_error("Unknow INFO sub-command")
 
