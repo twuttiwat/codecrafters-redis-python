@@ -559,7 +559,6 @@ async def handle_command(data, state) -> bytes:
                         response_str = f"""role:{state.role}
                                            master_replid:{master_replid}
                                            master_repl_offset:0"""
-                        #response = bulk_string(f"role:{state.role}\r\nmaster_replid:{master_replid}\r\nmaster_repl_offset:0\r\n")
                         response = bulk_string(response_str)
                     case _:
                         response = simple_error("Unknow INFO sub-command")

@@ -1,6 +1,7 @@
 import socket
 import asyncio
 from .command_handler import handle_command, State
+from app.resp import resp_array_from_strings
 
 async def handle_client(state):
     while True:
@@ -23,7 +24,12 @@ async def start(args):
     server_socket.setblocking(False)
 
     my_role = "master" if args.replicaof is None else "slave"
-    print(my_role)
+
+    if args.replicaof:
+        master_parts = args.replicaof.split(" ")
+        master_host, master_port = master_parts[0], master_parts[1]
+    else:
+        master_host, master_port = None, None
 
     shared_store = {}
     shared_streams = {}
@@ -34,14 +40,22 @@ async def start(args):
     passwords = []
     default_user = "default"
 
+    # Handshake with master server if slave
+    if my_role == "slave":
+        reader, writer = await asyncio.open_connection(master_host, master_port)
+        writer.write(resp_array_from_strings(["PING"]))
+        await writer.drain()
+
     while True:
         my_connection, _ = await asyncio.get_event_loop().sock_accept(server_socket)  # wait for client
         loop = asyncio.get_event_loop()
         client_channels = {}
         my_current_user = default_user if not passwords else None
-        state = State(role = my_role, store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
+        state = State(role = my_role,
+                      store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
                       sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
                       current_user = my_current_user, channels = client_channels, connection = my_connection,
                       is_multi = False, command_queue = [], schedule_remove = lambda k, t: loop.call_later(t, shared_store.pop, k))
+
         asyncio.create_task(handle_client(state))
 
