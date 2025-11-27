@@ -72,7 +72,7 @@ async def start(args):
         client_channels = {}
         my_current_user = default_user if not passwords else None
 
-        state = State(role = my_role, repl_connection = repl_connection, slave_connections = slave_connections,
+        state = State(role = my_role, slave_connections = slave_connections,
                       store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
                       sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
                       current_user = my_current_user, channels = client_channels, connection = my_connection,
