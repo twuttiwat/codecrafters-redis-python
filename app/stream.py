@@ -9,7 +9,7 @@ MIN_ENTRY_ID = "0-0"
 #
 # Interface
 #
-def validate_entry_id(last_entry_id: str, entry_id: str) -> tuple[bool, str]:
+def validate_entry_id(last_entry_id: str|None, entry_id: str) -> tuple[bool, str|None]:
     last_entry_id = "0-0" if last_entry_id is None else last_entry_id
 
     if "*" in entry_id:
@@ -52,7 +52,7 @@ def generate_seq_num(entry_ids: list[str], entry_id: str) -> int:
         return max_seq + 1
 
 
-def generate_auto_entry_id(entry_ids: list[str]) -> int:
+def generate_auto_entry_id(entry_ids: list[str]) -> str:
     max_seq = -1
     current_ts = int(time() * 1000)
     for en_time, en_seq in list(map(get_time_seq, entry_ids)):
@@ -72,6 +72,7 @@ def cmp_entry_id(id1: str, id2: str) -> int:
         return time1 - time2
 
 
-def get_time_seq(entry_id: str) -> (int, int):
-    return list(map(int, entry_id.split("-")))
+def get_time_seq(entry_id: str) -> tuple[int, int]:
+    entry_parts = entry_id.split("-")
+    return int(entry_parts[0]), int(entry_parts[1])
 

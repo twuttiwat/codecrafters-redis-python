@@ -1,6 +1,6 @@
 import socket
 import asyncio
-from .command_handler import handle_command, State
+from app.command_handler import handle_command, State
 from app.resp import resp_array_from_strings
 
 async def handle_client(state):

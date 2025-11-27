@@ -14,7 +14,7 @@ def validate_long(value: float) -> bool:
 def validate_lat(value: float) -> bool:
     return MIN_LATITUDE <= value <= MAX_LATITUDE
 
-def decode(geo_code: int) -> (float, float):
+def decode(geo_code: int) -> tuple[float, float]:
     """
     decode converts geo code(WGS84) to tuple of (latitude, longitude)
     """
@@ -43,7 +43,7 @@ def compact_int64_to_int32(v: int) -> int:
     return v
 
 
-def convert_grid_numbers_to_coordinates(grid_latitude_number, grid_longitude_number) -> (float, float):
+def convert_grid_numbers_to_coordinates(grid_latitude_number, grid_longitude_number) -> tuple[float, float]:
     # Calculate the grid boundaries
     grid_latitude_min = MIN_LATITUDE + LATITUDE_RANGE * (grid_latitude_number / (2**26))
     grid_latitude_max = MIN_LATITUDE + LATITUDE_RANGE * ((grid_latitude_number + 1) / (2**26))

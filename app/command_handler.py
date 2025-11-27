@@ -21,7 +21,7 @@ class State:
     default_user_flags: list
     default_passwords: list
     current_user: str
-    connection: socket
+    connection: socket.socket
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -31,7 +31,7 @@ def check_range_negative(lst_len, value):
     return max(lst_len + value, 0) if value < 0 else value
 
 
-async def blpop(list_name: str, timeout: float, state):
+async def blpop(list_name: str, timeout: float|None, state) -> bytes:
     timeout = None if timeout == 0.0 else timeout
     try:
         async with asyncio.timeout(timeout):
@@ -67,7 +67,7 @@ async def xread_block(timeout, state, stream_key, start_entry):
                         read_entries.append(entry)
 
                 if len(read_entries) == 0:
-                    print(f"XREAD BLOCK: No entries in stream")
+                    #print(f"XREAD BLOCK: No entries in stream")
                     await asyncio.sleep(0.01)
                 else:
                     print(f"XREAD BLOCK: {read_entries}")
@@ -568,7 +568,7 @@ async def handle_command(data, state) -> bytes:
 
             case "PSYNC":
                 replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-                response = simple_string(f"+FULLRESYNC {repl_id} 0")
+                response = simple_string(f"FULLRESYNC {replid} 0")
 
             # Unknow Command
             case _:

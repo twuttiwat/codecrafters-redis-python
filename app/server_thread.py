@@ -1,6 +1,6 @@
 import socket
 import threading
-from .command_handler import handle_command, State
+from command_handler import handle_command, State
 
 def handle_client(client_socket, state):
     while True:
