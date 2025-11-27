@@ -568,12 +568,19 @@ async def handle_command(data, state) -> bytes:
 
             case "PSYNC":
                 replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+
                 response = simple_string(f"FULLRESYNC {replid} 0")
+                state.connection.send(response)
+
+                empty_rdb_hex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
+                response = b"$" + str(len(bytes.fromhex(empty_rdb_hex))).encode() + b"\r\n" + bytes.fromhex(empty_rdb_hex)
 
             # Unknow Command
             case _:
                 response = simple_error("unknown command")
 
+        #state.connection.send(response)
         return response
     else:
+        #state.connection.send(response)
         return b"-ERR invalid request\r\n"

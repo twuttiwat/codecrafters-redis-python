@@ -26,7 +26,7 @@ async def handshake_master(master_host, master_port, listening_port):
         master_writer.write(resp_array_from_strings(cmd_arr))
         await master_writer.drain()
         data = await master_reader.read(100)
-        # print(f"Received {data.decode()}")
+        #print(f"Received {data.decode()}")
         return data
 
     await send_recv_cmd("PING")
