@@ -12,6 +12,7 @@ from app.stream import validate_entry_id, generate_entry_id
 @dataclass
 class State:
     role: str
+    slave_connections: list
     store: dict
     streams: dict
     list_store: dict
@@ -84,7 +85,7 @@ async def xread_block(timeout, state, stream_key, start_entry):
         return b"*-1\r\n"
 
 
-async def handle_command(data, state) -> bytes:
+async def handle_command(data, state, request) -> bytes:
     if data.startswith("*"):
         lines = data.split("\r\n")
         command = lines[2].upper()
@@ -112,12 +113,20 @@ async def handle_command(data, state) -> bytes:
                 response = bulk_string(lines[4])
 
             case "SET":
-                key = lines[4]
-                value = lines[6]
+                key, value = lines[4], lines[6]
+
                 if len(lines) > 8:
                     ttl_seconds = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
                     state.schedule_remove(key, ttl_seconds)
+
                 state.store[key] = value
+
+                # Replicate command to slaves
+                print(f"Number of slaves {len(state.slave_connections)}")
+                for slave_connection in state.slave_connections:
+                    print(f"Sending slave connection {slave_connection} with command {data}")
+                    slave_connection.send(request)
+
                 response = OK_STRING
 
             case "GET":
@@ -274,7 +283,7 @@ async def handle_command(data, state) -> bytes:
                     state.is_multi = False
                     responses = []
                     for command in state.command_queue:
-                        command_resp = await handle_command(command, state)
+                        command_resp = await handle_command(command, state, request)
                         responses.append(command_resp)
                     state.command_queue = []
                     response = resp_array(responses)
@@ -571,6 +580,10 @@ async def handle_command(data, state) -> bytes:
 
                 response = simple_string(f"FULLRESYNC {replid} 0")
                 state.connection.send(response)
+
+                print(f"Appending slave connection")
+                state.slave_connections.append(state.connection)
+                print(f"Slave connections length {len(state.slave_connections)}")
 
                 empty_rdb_hex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
                 response = b"$" + str(len(bytes.fromhex(empty_rdb_hex))).encode() + b"\r\n" + bytes.fromhex(empty_rdb_hex)
