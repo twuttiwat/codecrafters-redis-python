@@ -1,17 +1,19 @@
 import asyncio
 from dataclasses import dataclass
 import hashlib
-import socket
 
 import app.geo as geo
 from app.resp import EMPTY_ARRAY, NULL_ARRAY, NULL_BULK_STRING, OK_STRING, bulk_string, resp_array, resp_array_from_strings, resp_int, simple_error, simple_string
 from app.sorted_set import SortedSet
 from app.stream import validate_entry_id, generate_entry_id
-
+import app.encoder as encoder
+import app.decoder as decoder
 
 @dataclass
 class State:
     role: str
+    reader: asyncio.StreamReader
+    writer: asyncio.StreamWriter
     slave_connections: list
     store: dict
     streams: dict
@@ -22,7 +24,6 @@ class State:
     default_user_flags: list
     default_passwords: list
     current_user: str
-    connection: socket.socket
     is_multi: bool
     command_queue: list
     schedule_remove: object
@@ -85,142 +86,170 @@ async def xread_block(timeout, state, stream_key, start_entry):
         return b"*-1\r\n"
 
 
-async def handle_command(data, state, request) -> bytes:
-    if data.startswith("*"):
-        lines = data.split("\r\n")
-        command = lines[2].upper()
+async def handle_command(tokens: list[str], state) -> bytes | None:
+    command, *args = tokens
+    command = command.upper()
 
-        if command != "AUTH" and state.current_user is None:
-            return b"-NOAUTH Authentication required.\r\n"
+    if command != "AUTH" and state.current_user is None:
+        return b"-NOAUTH Authentication required.\r\n"
 
-        subscribed_commands = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"]
-        if len(state.channels) > 0 and not command in subscribed_commands:
-            return simple_error(f"Can't execute '{command}' in subscribed mode")
+    subscribed_commands = ["SUBSCRIBE", "UNSUBSCRIBE", "PSUBSCRIBE", "PUNSUBSCRIBE", "PING", "QUIT"]
+    if len(state.channels) > 0 and not command in subscribed_commands:
+        return simple_error(f"Can't execute '{command}' in subscribed mode")
 
-        if state.is_multi and command != "EXEC" and command != "DISCARD":
-            state.command_queue.append(data)
-            return simple_string("QUEUED")
+    if state.is_multi and command != "EXEC" and command != "DISCARD":
+        state.command_queue.append(encoder.encode_array(tokens))
+        return encoder.encode_simple_string("QUEUED")
 
-        match command:
-            case "PING":
-                if len(state.channels) == 0:
-                    response = simple_string("PONG")
-                else:
-                    response = resp_array([bulk_string("pong"), bulk_string("")])
+    match command.upper():
+        case "PING":
+            if len(state.channels) == 0:
+                return simple_string("PONG")
+            else:
+                return encoder.encode_array(["pong", ""])
+        case "ECHO":
+            return encoder.encode_bulk_string(args[0])
+        case "SET":
+            key, value = args[0], args[1]
 
-            case "ECHO":
-                message = lines[4]
-                response = bulk_string(lines[4])
+            if len(args) >= 4:
+                ttl_unit, ttl_amount = args[2].lower(), int(args[3])
+                ttl_seconds = ttl_amount / 1000 if ttl_unit == "px" else ttl_amount
+                state.schedule_remove(key, ttl_seconds)
 
-            case "SET":
-                key, value = lines[4], lines[6]
+            state.store[key] = value
 
-                if len(lines) > 8:
-                    ttl_seconds = int(lines[10]) / 1000 if lines[8].lower() == "px" else int(lines[10])
-                    state.schedule_remove(key, ttl_seconds)
+            # Replicate command to slaves
+            print(f"Number of slaves {len(state.slave_connections)}")
+            for slave_connection in state.slave_connections:
+                slave_connection.write(encoder.encode_array(tokens))
 
-                state.store[key] = value
+            if state.role == "master":
+                return encoder.encode_simple_string("OK")
+            else:
+                return None
+        case "GET":
+            key = args[0]
 
-                # Replicate command to slaves
-                print(f"Number of slaves {len(state.slave_connections)}")
-                for slave_connection in state.slave_connections:
-                    print(f"Sending slave connection {slave_connection} with command {data}")
-                    slave_connection.send(request)
+            value = state.store.get(key, None)
+            if value is not None:
+                return encoder.encode_bulk_string(value)
+            else:
+                return encoder.encode_null_bulk_string()
 
-                response = OK_STRING
+        case "INCR":
+            key = args[0]
+            value = state.store.get(key, "0")
+            if value.isdigit():
+                new_value = int(value) + 1
+                state.store[key] = str(new_value)
+                return encoder.encode_integer(new_value)
+            else:
+                print(f"INCR key is {key} and value is {value}")
+                return simple_error("value is not an integer or out of range")
 
-            case "GET":
-                key = lines[4]
-                value = state.store.get(key, None)
-                if value is not None:
-                    response = bulk_string(value)
-                else:
-                    response = NULL_BULK_STRING
+        case "TYPE":
+            key = args[0]
+            value = state.store.get(key, None)
+            if value is not None:
+                return simple_string("string")
+            elif key in state.streams:
+                return simple_string("stream")
+            else:
+                return simple_string("none")
 
-            case "INCR":
-                key = lines[4]
-                value = state.store.get(key, "0")
-                if value.isdigit():
-                    new_value = int(value) + 1
-                    state.store[key] = str(new_value)
-                    response = resp_int(new_value)
-                else:
-                    response = simple_error("value is not an integer or out of range")
+        case "XADD":
+            stream_key, entry_id = args[0], args[1]
+            key_values = []
+            index = 2
+            while index + 1 < len(args):
+                key, value = args[index], args[index + 1]
+                key_values.extend([key, value])
+                index += 1
 
-            case "TYPE":
-                key = lines[4]
-                value = state.store.get(key, None)
-                if value is not None:
-                    response = simple_string("string")
-                elif key in state.streams:
-                    response = simple_string("stream")
-                else:
-                    response = simple_string("none")
+            stream = state.streams.get(stream_key, [])
 
-            case "XADD":
-                stream_key, entry_id = lines[4], lines[6]
-                key_values = []
-                index = 8
-                while index + 2 < len(lines):
-                    key, value = lines[index], lines[index + 2]
-                    key_values.extend([key, value])
-                    index += 2
+            last_entry_id = stream[-1]["id"] if (len(stream) > 0) else None
+            is_valid, validate_err = validate_entry_id(last_entry_id, entry_id)
+            if not is_valid:
+                return simple_error(validate_err)
 
-                stream = state.streams.get(stream_key, [])
+            entry_ids = [entry["id"] for entry in stream]
+            entry_id = generate_entry_id(entry_ids, entry_id)
 
-                print(f"stream: {stream}")
-                last_entry_id = stream[-1]["id"] if (len(stream) > 0) else None
-                print(f"last_entry_id: {last_entry_id}")
-                is_valid, validate_err = validate_entry_id(last_entry_id, entry_id)
-                if not is_valid:
-                    return simple_error(validate_err)
+            new_entry = {
+                "id": entry_id,
+                "key_values": key_values
+            }
 
-                entry_ids = [entry["id"] for entry in stream]
-                entry_id = generate_entry_id(entry_ids, entry_id)
+            stream.append(new_entry)
+            state.streams[stream_key] = stream
 
-                new_entry = {
-                    "id": entry_id,
-                    "key_values": key_values
-                }
+            return encoder.encode_bulk_string(entry_id)
 
-                stream.append(new_entry)
-                state.streams[stream_key] = stream
+        case "XRANGE":
+            stream_key, start_entry, end_entry = args[0], args[1], args[2]
+            stream = state.streams.get(stream_key, [])
 
-                response = bulk_string(entry_id)
+            if "-" not in start_entry:
+                start_entry = start_entry + "-0"
 
-            case "XRANGE":
-                stream_key, start_entry, end_entry = lines[4], lines[6], lines[8]
-                stream = state.streams.get(stream_key, [])
+            if end_entry == "+":
+                end_entry = stream[-1]["id"] if stream else "0-0"
+            elif "-" not in end_entry:
+                end_max_seq = "0"
+                for entry_id in stream:
+                   if entry_id.startswith(end_entry):
+                        end_max_seq = entry_id.split("-")[1]
+                end_entry = end_entry + "-" + end_max_seq
 
-                if "-" not in start_entry:
-                    start_entry = start_entry + "-0"
+            range_entries = []
+            for entry in stream:
+                if start_entry <= entry["id"] <= end_entry:
+                    range_entries.append(entry)
 
-                if end_entry == "+":
-                    end_entry = stream[-1]["id"] if stream else "0-0"
-                elif "-" not in end_entry:
-                    end_max_seq = "0"
-                    for entry_id in stream:
-                        if entry_id.startswith(end_entry):
-                            end_max_seq = entry_id.split("-")[1]
-                    end_entry = end_entry + "-" + end_max_seq
+            resp_entries = []
+            for entry in range_entries:
+                resp_entries.append( encoder.encode_array([ entry["id"], entry["key_values"] ]) )
 
-                range_entries = []
-                for entry in stream:
-                    if start_entry <= entry["id"] and entry["id"] <= end_entry:
-                        range_entries.append(entry)
+            return resp_array(resp_entries)
 
-                resp_entries = []
-                for entry in range_entries:
-                    key_values_arr = resp_array_from_strings(entry["key_values"])
-                    resp_entries.append( resp_array([bulk_string(entry["id"]), key_values_arr]) )
+        case "XREAD":
+            sub_command = args[0]
+            match sub_command.upper():
+                case "STREAM":
+                    stream_key, start_entry = args[1], args[2]
+                    stream = state.streams.get(stream_key, [])
 
-                response = resp_array(resp_entries)
+                    read_entries = []
+                    for entry in stream:
+                        if entry["id"] > start_entry:
+                            read_entries.append(entry)
 
-            case "XREAD":
-                sub_command = lines[4]
-                match sub_command.upper():
-                    case "STREAM":
-                        stream_key, start_entry = lines[6], lines[8]
+                    resp_entries = []
+                    for entry in read_entries:
+                        resp_entries.append([
+                            entry["id"], entry["key_values"]
+                        ])
+
+                    return  encoder.encode_array([
+                       stream_key, resp_entries
+                    ])
+
+                case "STREAMS":
+                    key_and_ids = []
+                    index = 1
+                    while index < len(args):
+                        key_and_ids.append(args[index])
+                        index += 1
+
+                    key_id_pairs = []
+                    for i in range(0, len(key_and_ids) // 2):
+                        stream_key, entry_id = key_and_ids[i], key_and_ids[i + len(key_and_ids) // 2]
+                        key_id_pairs.append((stream_key, entry_id))
+
+                    result_entries = []
+                    for stream_key, start_entry in key_id_pairs:
                         stream = state.streams.get(stream_key, [])
 
                         read_entries = []
@@ -230,370 +259,357 @@ async def handle_command(data, state, request) -> bytes:
 
                         resp_entries = []
                         for entry in read_entries:
-                            key_values_arr = resp_array_from_strings(entry["key_values"])
-                            resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
+                            resp_entries.append([ entry["id"], entry["key_values"] ])
 
-                        response = resp_array([ resp_array([bulk_string(stream_key), resp_array(resp_entries)]) ])
-                    case "STREAMS":
-                        key_and_ids = []
-                        index = 6
-                        while index < len(lines):
-                            key_and_ids.append(lines[index])
-                            index += 2
+                        result_entries.append([stream_key, resp_entries])
 
-                        key_id_pairs = []
-                        for i in range(0, len(key_and_ids) // 2):
-                            stream_key, entry_id = key_and_ids[i], key_and_ids[i + len(key_and_ids) // 2]
-                            key_id_pairs.append((stream_key, entry_id))
+                    return encoder.encode_array(result_entries)
 
-                        result_entries = []
-                        for stream_key, start_entry in key_id_pairs:
-                            stream = state.streams.get(stream_key, [])
+                case "BLOCK":
+                    timeout_ms, stream_key, start_entry = int(args[1]), args[3], args[4]
+                    print(f"XREAD BLOCK: timeout {timeout_ms}, key {stream_key}, entry {start_entry}")
+                    return await xread_block(timeout_ms / 1000.0, state, stream_key, start_entry)
 
-                            read_entries = []
-                            for entry in stream:
-                                if entry["id"] > start_entry:
-                                    read_entries.append(entry)
+        case "MULTI":
+            state.is_multi = True
+            return OK_STRING
 
-                            resp_entries = []
-                            for entry in read_entries:
-                                key_values_arr = resp_array_from_strings(entry["key_values"])
-                                resp_entries.append(resp_array([bulk_string(entry["id"]), key_values_arr]))
+        case "EXEC":
+            if not state.is_multi:
+                return simple_error("EXEC without MULTI")
+            elif not state.command_queue:
+                state.is_multi = False
+                return EMPTY_ARRAY
+            else:
+                state.is_multi = False
+                responses = []
+                print(f"EXEC command queue: {state.command_queue=}")
+                for command in state.command_queue:
+                    exec_tokens, _ = decoder.decode_array(command)
+                    command_resp = await handle_command(exec_tokens, state)
+                    print(f"Command Response {command_resp=}")
+                    # decoded_resp, _ = decoder.decode(command_resp)
+                    if command_resp:
+                        print(f"Response from tokens {exec_tokens=}")
+                        print(f"is: {command_resp=}")
 
-                            result_entries.append( resp_array([bulk_string(stream_key), resp_array(resp_entries)]) )
-
-                        response = resp_array(result_entries)
-
-                    case "BLOCK":
-                        timeout_ms, stream_key, start_entry = int(lines[6]), lines[10], lines[12]
-                        print(f"XREAD BLOCK: timeout {timeout_ms}, key {stream_key}, entry {start_entry}")
-                        response = await xread_block(timeout_ms / 1000.0, state, stream_key, start_entry)
-
-            case "MULTI":
-                state.is_multi = True
-                response = OK_STRING
-
-            case "EXEC":
-                if not state.is_multi:
-                    response = simple_error("EXEC without MULTI")
-                elif not state.command_queue:
-                    state.is_multi = False
-                    response = EMPTY_ARRAY
-                else:
-                    state.is_multi = False
-                    responses = []
-                    for command in state.command_queue:
-                        command_resp = await handle_command(command, state, request)
+                        #state.writer.write(command_resp)
+                        #await state.writer.drain()
                         responses.append(command_resp)
-                    state.command_queue = []
-                    response = resp_array(responses)
+                state.command_queue = []
+                return resp_array(responses)
+                #return encoder.encode_array(responses)
 
-            case "DISCARD":
-                if not state.is_multi:
-                    response = simple_error("DISCARD without MULTI")
-                else:
-                    state.is_multi = False
-                    state.command_queue = []
-                    response = OK_STRING
+        case "DISCARD":
+            if not state.is_multi:
+                return simple_error("DISCARD without MULTI")
+            else:
+                state.is_multi = False
+                state.command_queue = []
+                return OK_STRING
 
-            case "RPUSH":
-                current_list = state.list_store.get(lines[4], [])
-                elem_index = 6
-                while elem_index <= len(lines):
-                    current_list.append(lines[elem_index])
-                    elem_index += 2
-                state.list_store[lines[4]] = current_list
-                response = resp_int(len(current_list))
+        case "RPUSH":
+            key = args[0]
+            current_list = state.list_store.get(key, [])
+            elem_index = 1
+            while elem_index < len(args):
+                current_list.append(args[elem_index])
+                elem_index += 1
+            state.list_store[key] = current_list
+            return encoder.encode_integer(len(current_list))
 
-            case "LPUSH":
-                current_list = state.list_store.get(lines[4], [])
-                elem_index = 6
-                while elem_index <= len(lines):
-                    current_list.insert(0, lines[elem_index])
-                    elem_index += 2
-                state.list_store[lines[4]] = current_list
-                response = resp_int(len(current_list))
+        case "LPUSH":
+            key = args[0]
+            current_list = state.list_store.get(key, [])
+            elem_index = 1
+            while elem_index < len(args):
+                current_list.insert(0, args[elem_index])
+                elem_index += 1
+            state.list_store[key] = current_list
+            return encoder.encode_integer(len(current_list))
 
-            case "LLEN":
-                current_list = state.list_store.get(lines[4], [])
-                response = resp_int(len(current_list))
+        case "LLEN":
+            key = args[0]
+            current_list = state.list_store.get(key, [])
+            return encoder.encode_integer(len(current_list))
 
-            case "LPOP":
-                current_list = state.list_store.get(lines[4], [])
-                print(f"LPOP: current_list: {current_list}")
-                if len(current_list) == 0:
-                    response = NULL_BULK_STRING
-                elif len(lines) >= 6:
-                    values = []
-                    for _ in range(int(lines[6])):
-                        values.append(current_list.pop(0))
-                    response = resp_array_from_strings(values)
-                else:
-                    value = current_list.pop(0)
-                    response = bulk_string(value)
+        case "LPOP":
+            key = args[0]
+            current_list = state.list_store.get(key, [])
+            if len(current_list) == 0:
+                return NULL_BULK_STRING
+            elif len(args) >= 2:
+                count = int(args[1])
+                values = []
+                for _ in range(count):
+                    values.append(current_list.pop(0))
+                return encoder.encode_array(values)
+            else:
+                value = current_list.pop(0)
+                return encoder.encode_bulk_string(value)
 
-            case "BLPOP":
-                response = await blpop(lines[4], float(lines[6]), state)
+        case "BLPOP":
+            key, timeout = args[0], float(args[1])
+            return await blpop(key, timeout, state)
 
-            case "LRANGE":
-                current_list = state.list_store.get(lines[4], [])
-                lst_len = len(current_list)
-                start, stop = int(lines[6]), int(lines[8])
+        case "LRANGE":
+            key, start, stop = args[0], int(args[1]), int(args[2])
 
-                start = check_range_negative(lst_len, start)
-                stop = check_range_negative(lst_len, stop)
+            current_list = state.list_store.get(key, [])
+            lst_len = len(current_list)
 
-                if lst_len == 0 or start >= lst_len:
-                    response = EMPTY_ARRAY
-                else:
-                    if stop >= lst_len:
-                       stop = lst_len - 1
-                    slice = current_list[start:stop + 1]
-                    response = resp_array_from_strings(slice)
+            start = check_range_negative(lst_len, start)
+            stop = check_range_negative(lst_len, stop)
 
-            case "SUBSCRIBE":
-                channel_name = lines[4]
+            if lst_len == 0 or start >= lst_len:
+                return EMPTY_ARRAY
+            else:
+                if stop >= lst_len:
+                   stop = lst_len - 1
+                slice = current_list[start:stop + 1]
+                return resp_array_from_strings(slice)
 
-                channel_clients = state.shared_channels.get(channel_name, [])
-                channel_clients.append(state.connection)
-                state.shared_channels[channel_name] = channel_clients
+        case "SUBSCRIBE":
+            channel_name = args[0]
 
-                current_channel = state.channels.get(channel_name, None)
-                if current_channel is None:
-                    state.channels[channel_name] = True
+            channel_clients = state.shared_channels.get(channel_name, [])
+            channel_clients.append(state.writer)
+            state.shared_channels[channel_name] = channel_clients
 
-                response = resp_array([bulk_string("subscribe"), bulk_string(channel_name), resp_int(len(state.channels))])
+            current_channel = state.channels.get(channel_name, None)
+            if current_channel is None:
+                state.channels[channel_name] = True
 
-            case "UNSUBSCRIBE":
-                channel_name = lines[4]
+            return encoder.encode_array([ "subscribe", channel_name, len(state.channels) ])
 
-                channel_clients = state.shared_channels.get(channel_name, [])
-                if state.connection in channel_clients:
-                    channel_clients.remove(state.connection)
-                state.shared_channels[channel_name] = channel_clients
+        case "UNSUBSCRIBE":
+            channel_name = args[0]
 
-                current_channel = state.channels.get(channel_name, None)
-                if not current_channel is None:
-                    del state.channels[channel_name]
+            channel_clients = state.shared_channels.get(channel_name, [])
+            if state.writer in channel_clients:
+                channel_clients.remove(state.writer)
+            state.shared_channels[channel_name] = channel_clients
 
-                response = resp_array([bulk_string("unsubscribe"), bulk_string(channel_name), resp_int(len(state.channels))])
+            current_channel = state.channels.get(channel_name, None)
+            if not current_channel is None:
+                del state.channels[channel_name]
 
+            return encoder.encode_array([ "unsubscribe", channel_name, len(state.channels) ])
 
-            case "PUBLISH":
-                channel_name, message = lines[4], lines[6]
+        case "PUBLISH":
+            channel_name, message = args[:2]
 
-                channel_clients = state.shared_channels.get(channel_name, [])
-                channel_resp = resp_array([bulk_string("message"), bulk_string(channel_name), bulk_string(message)])
-                for client in channel_clients:
-                    client.send(channel_resp)
+            channel_clients = state.shared_channels.get(channel_name, [])
+            channel_resp = encoder.encode_array([ "message", channel_name, message ])
+            for client in channel_clients:
+                client.write(channel_resp)
 
-                response = resp_int(len(channel_clients))
+            return encoder.encode_integer( len(channel_clients) )
 
-            case "ZADD":
-                set_name, score, member = lines[4], float(lines[6]), lines[8]
-                current_set = state.sorted_sets.get(set_name, SortedSet())
+        case "ZADD":
+            set_name, score, member = args[0], float(args[1]), args[2]
+            current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                response = resp_int(current_set.add((score, member)))
+            count = current_set.add((score, member))
+            state.sorted_sets[set_name] = current_set
 
-                state.sorted_sets[set_name] = current_set
+            return encoder.encode_integer(count)
 
-            case "ZRANK":
-                set_name, member = lines[4], lines[6]
-                current_set = state.sorted_sets.get(set_name, SortedSet())
+        case "ZRANK":
+            set_name, member = args[:2]
+            current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                rank = current_set.rank(member)
+            rank = current_set.rank(member)
 
-                response = resp_int(rank) if (rank is not None) else NULL_BULK_STRING
+            return  encoder.encode_integer(rank) if (rank is not None) else NULL_BULK_STRING
 
-            case "ZRANGE":
-                set_name, start, stop = lines[4], int(lines[6]), int(lines[8])
-                current_set = state.sorted_sets.get(set_name, SortedSet())
+        case "ZRANGE":
+            set_name, start, stop = args[0], int(args[1]), int(args[2])
+            current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                items = current_set.range(start, stop)
-                if items:
-                    members = [member for (_, member) in items]
-                    response = resp_array_from_strings(members)
-                else:
-                    response = EMPTY_ARRAY
+            items = current_set.range(start, stop)
+            if items:
+                members = [member for (_, member) in items]
+                return encoder.encode_array(members)
+            else:
+                return EMPTY_ARRAY
 
-            case "ZCARD":
-                set_name = lines[4]
-                current_set = state.sorted_sets.get(set_name, SortedSet())
-                response = resp_int(current_set.count())
+        case "ZCARD":
+            set_name = args[0]
+            current_set = state.sorted_sets.get(set_name, SortedSet())
+            return encoder.encode_integer(current_set.count())
 
-            case "ZSCORE":
-                set_name, member = lines[4], lines[6]
-                current_set = state.sorted_sets.get(set_name, SortedSet())
+        case "ZSCORE":
+            set_name, member = args[:2]
+            current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                score = current_set.score(member)
-                if score:
-                    response = bulk_string(str(score))
-                else:
-                    response = NULL_BULK_STRING
+            score = current_set.score(member)
+            if score:
+                return encoder.encode_bulk_string(str(score))
+            else:
+                return NULL_BULK_STRING
 
-            case "ZREM":
-                set_name, member = lines[4], lines[6]
-                current_set = state.sorted_sets.get(set_name, SortedSet())
+        case "ZREM":
+            set_name, member = args[:2]
+            current_set = state.sorted_sets.get(set_name, SortedSet())
 
-                response = resp_int(current_set.remove(member))
+            set_count = current_set.remove(member)
+            state.sorted_sets[set_name] = current_set
 
-                state.sorted_sets[set_name] = current_set
+            return encoder.encode_integer(set_count)
 
-            case "GEOADD":
-                loc_key, long, lat, member = lines[4], float(lines[6]), float(lines[8]), lines[10]
+        case "GEOADD":
+            loc_key, long, lat, member = args[0], float(args[1]), float(args[2]), args[3]
 
-                invalid_long = not geo.validate_long(long)
-                invalid_lat = not geo.validate_lat(lat)
-                if invalid_long and invalid_lat:
-                    response = simple_error("invalid longitude and latitude")
-                elif invalid_long:
-                    response = simple_error("invalid longitude")
-                elif invalid_lat:
-                    response = simple_error("invalid latitude")
-                else:
-                    current_set = state.sorted_sets.get(loc_key, SortedSet())
-                    print(f"GEOADD lat long: {lat} {long}")
-                    score = geo.encode(lat, long)
-                    response = resp_int(current_set.add((score, member)))
-
-                    state.sorted_sets[loc_key] = current_set
-
-            case "GEOPOS":
-                loc_key = lines[4]
-
-                # Get list of members
-                members = []
-                member_index = 6
-                while member_index < len(lines):
-                    members.append( lines[member_index] )
-                    member_index += 2
-
+            invalid_long = not geo.validate_long(long)
+            invalid_lat = not geo.validate_lat(lat)
+            if invalid_long and invalid_lat:
+                return simple_error("invalid longitude and latitude")
+            elif invalid_long:
+                return simple_error("invalid longitude")
+            elif invalid_lat:
+                return simple_error("invalid latitude")
+            else:
                 current_set = state.sorted_sets.get(loc_key, SortedSet())
-                if current_set.count() == 0:
-                    null_responses = [ NULL_ARRAY for _ in range(1, len(members) + 1) ]
-                    response = resp_array(null_responses)
-                else:
-                    member_responses = []
-                    for member in members:
-                        score = current_set.score(member)
-                        if score is not None:
-                            score = int(current_set.score(member))
-                            lat, long = geo.decode(score)
-                            print(f"GEOPOS lat long: {lat} {long}")
-                            member_responses.append( resp_array_from_strings([str(long), str(lat)]) )
-                        else:
-                            member_responses.append( NULL_ARRAY )
-                    response = resp_array(member_responses)
+                score = geo.encode(lat, long)
+                set_count = current_set.add((score, member))
+                state.sorted_sets[loc_key] = current_set
+                return encoder.encode_integer(set_count)
 
-            case "GEODIST":
-                loc_key, member1, member2 = lines[4], lines[6], lines[8]
+        case "GEOPOS":
+            loc_key = args[0]
 
-                current_set = state.sorted_sets.get(loc_key, SortedSet())
-                if current_set.count() == 0:
-                    response = NULL_BULK_STRING
-                else:
-                    score1 = int(current_set.score(member1))
-                    lat1, long1 = geo.decode(score1)
+            # Get list of members
+            members = []
+            member_index = 1
+            while member_index < len(args):
+                members.append( args[member_index] )
+                member_index += 1
 
-                    score2 = int(current_set.score(member2))
-                    lat2, long2 = geo.decode(score2)
-
-                    response = bulk_string(str(geo.haversine(lat1, long1, lat2, long2)))
-
-            # GEOSEARCH places FROMLONLAT 2 48 BYRADIUS 100000 m
-            case "GEOSEARCH":
-                loc_key, lon, lat, radius, unit = lines[4], float(lines[8]), float(lines[10]), float(lines[14]), lines[16]
-
-                current_set = state.sorted_sets.get(loc_key, SortedSet())
-                if current_set.count() == 0:
-                    response = EMPTY_ARRAY
-                else:
-                    places_in_radius = []
-                    for score, member in current_set.items:
-                        member_lat, member_lon = geo.decode(score)
-                        dist_in_m = geo.haversine(lat, lon, member_lat, member_lon)
-                        if dist_in_m <= radius:
-                            places_in_radius.append(member)
-                    response = resp_array_from_strings(places_in_radius)
-
-            case "ACL":
-                sub_command = lines[4]
-                if sub_command == "WHOAMI":
-                    if state.current_user:
-                        response = bulk_string("default")
+            current_set = state.sorted_sets.get(loc_key, SortedSet())
+            if current_set.count() == 0:
+                null_responses = [ [-1] for _ in range(1, len(members) + 1) ]
+                return encoder.encode_array(null_responses)
+            else:
+                member_responses = []
+                for member in members:
+                    score = current_set.score(member)
+                    if score is not None:
+                        score = int(current_set.score(member))
+                        lat, long = geo.decode(score)
+                        member_responses.append( [str(long), str(lat)] )
                     else:
-                        response = b"-NOAUTH Authentication required.\r\n"
-                elif sub_command == "GETUSER":
-                    user = lines[6]
+                        member_responses.append([-1])
+                return encoder.encode_array(member_responses)
 
-                    user_flags = resp_array_from_strings(state.default_user_flags) if state.default_user_flags else EMPTY_ARRAY
-                    if state.default_passwords:
-                        passwords_array = resp_array_from_strings(state.default_passwords)
-                        response = resp_array([bulk_string("flags"), user_flags,
-                                               bulk_string("passwords"), passwords_array])
-                    else:
-                        response = resp_array([bulk_string("flags"), user_flags,
-                                               bulk_string("passwords"), EMPTY_ARRAY])
-                elif sub_command == "SETUSER":
-                    user, password = lines[6], lines[8].removeprefix(">")
+        case "GEODIST":
+            loc_key, member1, member2 = args[:3]
 
-                    password_hash = hashlib.sha256(password.encode()).hexdigest()
-                    state.default_passwords.append(password_hash)
+            current_set = state.sorted_sets.get(loc_key, SortedSet())
+            if current_set.count() == 0:
+                return NULL_BULK_STRING
+            else:
+                score1 = int(current_set.score(member1))
+                lat1, long1 = geo.decode(score1)
 
-                    state.default_user_flags = []
+                score2 = int(current_set.score(member2))
+                lat2, long2 = geo.decode(score2)
 
-                    response = OK_STRING
+                return encoder.encode_bulk_string( str(geo.haversine(lat1, long1, lat2, long2)) )
+
+        case "GEOSEARCH":
+            loc_key, lon, lat, radius, unit = args[0], float(args[2]), float(args[3]), float(args[5]), args[6]
+
+            current_set = state.sorted_sets.get(loc_key, SortedSet())
+            if current_set.count() == 0:
+                return EMPTY_ARRAY
+            else:
+                places_in_radius = []
+                for score, member in current_set.items:
+                    member_lat, member_lon = geo.decode(score)
+                    dist_in_m = geo.haversine(lat, lon, member_lat, member_lon)
+                    if dist_in_m <= radius:
+                        places_in_radius.append(member)
+                return resp_array_from_strings(places_in_radius)
+
+        case "ACL":
+            sub_command = args[0]
+            if sub_command == "WHOAMI":
+                if state.current_user:
+                    return encoder.encode_bulk_string("default")
                 else:
-                    response = NULL_BULK_STRING
-
-            case "AUTH":
-                password = lines[6]
-
+                    return b"-NOAUTH Authentication required.\r\n"
+            elif sub_command == "GETUSER":
+                user_flags = state.default_user_flags if state.default_user_flags else []
                 if state.default_passwords:
-                    password_hash = hashlib.sha256(password.encode()).hexdigest()
-                    existing_password = state.default_passwords[0]
-                    if password_hash == existing_password:
-                        state.current_user = "default"
-                        response = OK_STRING
-                    else:
-                        response = b"-WRONGPASS\r\n"
+                    res = [ "flags", user_flags,
+                            "passwords", state.default_passwords ]
+
+                    print(f"Result with default pwd: {res}")
+
+                    return encoder.encode_array([
+                            "flags", user_flags,
+                            "passwords", state.default_passwords ])
                 else:
-                    response = simple_error("WRONGPASS")
+                    res = [ "flags", user_flags,
+                            "passwords", [] ]
 
-            case "INFO":
-                sub_command = lines[4]
-                match sub_command.upper():
-                    case "REPLICATION":
-                        master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
-                        response_str = f"""role:{state.role}
-                                           master_replid:{master_replid}
-                                           master_repl_offset:0"""
-                        response = bulk_string(response_str)
-                    case _:
-                        response = simple_error("Unknow INFO sub-command")
+                    print(f"Result with NO default pwd: {res}")
 
-            case "REPLCONF":
-                response = OK_STRING
+                    return encoder.encode_array([
+                            "flags", user_flags,
+                            "passwords", [] ])
+            elif sub_command == "SETUSER":
+                user, password = args[1], args[2].removeprefix(">")
 
-            case "PSYNC":
-                replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+                password_hash = hashlib.sha256(password.encode()).hexdigest()
+                state.default_passwords.append(password_hash)
+                state.default_user_flags = []
 
-                response = simple_string(f"FULLRESYNC {replid} 0")
-                state.connection.send(response)
+                return OK_STRING
+            else:
+                return NULL_BULK_STRING
 
-                print(f"Appending slave connection")
-                state.slave_connections.append(state.connection)
-                print(f"Slave connections length {len(state.slave_connections)}")
+        case "AUTH":
+            password = args[1]
 
-                empty_rdb_hex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
-                response = b"$" + str(len(bytes.fromhex(empty_rdb_hex))).encode() + b"\r\n" + bytes.fromhex(empty_rdb_hex)
+            if state.default_passwords:
+                password_hash = hashlib.sha256(password.encode()).hexdigest()
+                existing_password = state.default_passwords[0]
+                if password_hash == existing_password:
+                    state.current_user = "default"
+                    return OK_STRING
+                else:
+                    return b"-WRONGPASS\r\n"
+            else:
+                return simple_error("WRONGPASS")
 
-            # Unknow Command
-            case _:
-                response = simple_error("unknown command")
+        case "INFO":
+            sub_command = args[0]
+            match sub_command.upper():
+                case "REPLICATION":
+                    master_replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+                    response_str = f"""role:{state.role}
+                                       master_replid:{master_replid}
+                                       master_repl_offset:0"""
+                    return encoder.encode_bulk_string(response_str)
+                case _:
+                    return simple_error("Unknow INFO sub-command")
 
-        #state.connection.send(response)
-        return response
-    else:
-        #state.connection.send(response)
-        return b"-ERR invalid request\r\n"
+        case "REPLCONF":
+            return OK_STRING
+
+        case "PSYNC":
+            replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
+            response = encoder.encode_simple_string(f"FULLRESYNC {replid} 0")
+            state.writer.write(response)
+            state.slave_connections.append(state.writer)
+
+            empty_rdb_hex = "524544495330303131fa0972656469732d76657205372e322e30fa0a72656469732d62697473c040fa056374696d65c26d08bc65fa08757365642d6d656dc2b0c41000fa08616f662d62617365c000fff06e3bfec0ff5aa2"
+            return b"$" + str(len(bytes.fromhex(empty_rdb_hex))).encode() + b"\r\n" + bytes.fromhex(empty_rdb_hex)
+
+        # Unknow Command
+        case _:
+            return simple_error("unknown command")
+
+    return b""
