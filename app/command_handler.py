@@ -597,7 +597,12 @@ async def handle_command(tokens: list[str], state) -> bytes | None:
                     return simple_error("Unknow INFO sub-command")
 
         case "REPLCONF":
-            return OK_STRING
+            sub_command = args[0]
+            match sub_command.upper():
+                case "GETACK":
+                    return encoder.encode_array(["REPLCONF", "ACK", "0"])
+                case _:
+                    return OK_STRING
 
         case "PSYNC":
             replid = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb"
