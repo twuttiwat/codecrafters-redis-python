@@ -15,6 +15,7 @@ class State:
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
     slave_connections: list
+    received_bytes: int
     store: dict
     streams: dict
     list_store: dict
@@ -103,7 +104,9 @@ async def handle_command(tokens: list[str], state) -> bytes | None:
 
     match command.upper():
         case "PING":
-            if len(state.channels) == 0:
+            if state.role == "slave":
+                return None
+            elif len(state.channels) == 0:
                 return simple_string("PONG")
             else:
                 return encoder.encode_array(["pong", ""])
@@ -122,6 +125,7 @@ async def handle_command(tokens: list[str], state) -> bytes | None:
             # Replicate command to slaves
             print(f"Number of slaves {len(state.slave_connections)}")
             for slave_connection in state.slave_connections:
+                print(f"*****Replicate****")
                 slave_connection.write(encoder.encode_array(tokens))
 
             if state.role == "master":
@@ -600,7 +604,8 @@ async def handle_command(tokens: list[str], state) -> bytes | None:
             sub_command = args[0]
             match sub_command.upper():
                 case "GETACK":
-                    return encoder.encode_array(["REPLCONF", "ACK", "0"])
+                    ACK_BYTES = 37
+                    return encoder.encode_array(["REPLCONF", "ACK", str(state.received_bytes - ACK_BYTES)])
                 case _:
                     return OK_STRING
 

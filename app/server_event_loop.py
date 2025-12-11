@@ -27,6 +27,8 @@ async def handle_client(state):
                 tokens, consumed = decoder.decode_array(buffer)
                 print(f"Received tokens =", tokens)
 
+                state.received_bytes += consumed
+
                 response = await handle_command(tokens, state)
                 if response:
 
@@ -95,6 +97,7 @@ async def start(args):
         my_current_user = default_user if not passwords else None
 
         state = State(role = my_role, reader = reader, writer = writer, slave_connections = slave_connections,
+                      received_bytes = 0,
                       store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
                       sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
                       current_user = my_current_user, channels = client_channels,
@@ -108,6 +111,7 @@ async def start(args):
         my_current_user = default_user if not passwords else None
 
         state = State(role = my_role, reader = reader, writer = writer, slave_connections = slave_connections,
+                      received_bytes = 0,
                       store = shared_store, streams = shared_streams, list_store = shared_list_store, shared_channels = my_shared_channels,
                       sorted_sets = shared_sorted_sets, default_passwords = passwords, default_user_flags = user_flags,
                       current_user = my_current_user, channels = client_channels,
