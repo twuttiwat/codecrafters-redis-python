@@ -1,20 +1,35 @@
-import socket  # noqa: F401
+import asyncio
+
+async def handle_client(reader, writer):
+    addr = writer.get_extra_info('peername')
+    print(f"Connected by {addr}")
+
+    while True:
+        data = await reader.read(1024)
+        if not data:
+            break
+
+        print(f"Received from {addr}: {data!r}")
+
+        writer.write(b"+PONG\r\n")
+        await writer.drain()
+
+    print(f"Closing {addr}")
+    writer.close()
+    await writer.wait_closed()
 
 
-def main():
+async def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
-    # Uncomment the code below to pass the first stage
-    #
-    server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    client_socket, client_address = server_socket.accept() # wait for client
-    while True:
-        data = client_socket.recv(1024)
-        if not data:
-            break
-        client_socket.sendall(b"+PONG\r\n")
+    server = await asyncio.start_server(handle_client, "localhost", 6379)
 
+    addr = server.sockets[0].getsockname()
+    print(f"Serving on {addr}")
+
+    async with server:
+        await server.serve_forever()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
