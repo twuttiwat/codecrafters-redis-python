@@ -1,5 +1,7 @@
 import asyncio
 
+from app.Command import Command
+
 async def handle_client(reader, writer):
     addr = writer.get_extra_info('peername')
     print(f"Connected by {addr}")
@@ -11,7 +13,10 @@ async def handle_client(reader, writer):
 
         print(f"Received from {addr}: {data!r}")
 
-        writer.write(b"+PONG\r\n")
+        command = Command.parse(data)
+        response = command.get_response()
+
+        writer.write(response)
         await writer.drain()
 
     print(f"Closing {addr}")
