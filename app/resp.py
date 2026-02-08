@@ -1,3 +1,6 @@
+OK = b'+OK\r\n'
+NULL_BULK_STR = b'$-1\r\n'
+
 def decode_command(bytes_data):
     """Decode simple Redis RESP command array (*N\r\n$len\r\nvalue\r\n...). Returns only command name and arguments"""
     lines = bytes_data.decode().strip().split('\r\n')
