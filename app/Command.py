@@ -1,4 +1,45 @@
+from types import SimpleNamespace
+
 import app.resp as resp
+
+COMMANDS = {}
+
+def command(name=None):
+    def decorator(f):
+        cmd_name = name if name is not None else f.__name__.lower()
+        print(f"cmd_name: {cmd_name}")
+        COMMANDS[cmd_name] = f
+        return f
+    return decorator
+
+@command()
+def ping(ctx):
+    return b"+PONG\r\n"
+
+@command()
+def echo(ctx, message):
+    return resp.encode_bulk_str(message)
+
+@command()
+def set(ctx, key, value, exp_unit=None, exp_val=None):
+    expired_in_ms = None
+    if exp_unit and exp_val:
+        match exp_unit.upper():
+            case "PX":
+                expired_in_ms = int(exp_val)
+            case "EX":
+                expired_in_ms = int(exp_val) * 1000
+
+    ctx.state.set(key, value, expired_in_ms)
+    return resp.OK
+
+@command()
+def get(ctx, key):
+    value = ctx.state.get(key)
+    if value is None:
+        return resp.NULL_BULK_STR
+    else:
+        return resp.encode_bulk_str(value)
 
 class Command:
     def __init__(self, name, args):
@@ -17,23 +58,10 @@ class Command:
             case _:
                 raise ValueError("Invalid or empty RESP command array")
 
-    def get_response(self, server):
-        match self.name.upper():
-            case "PING":
-                return b"+PONG\r\n"
-            case "ECHO":
-                # ECHO message
-                message = self.args[0]
-                return resp.encode_bulk_str(message)
-            case "SET":
-                key, value = self.args[0], self.args[1]
-                server.set(key, value)
-                return resp.OK
-            case "GET":
-                key = self.args[0]
-                value = server.get(key)
-                if value is None:
-                    return resp.NULL_BULK_STR
-                else:
-                    return resp.encode_bulk_str(value)
+    def dispatch(self, ctx):
+        func = COMMANDS.get(self.name.lower())
+        if not func:
+            return "Unknown command"
 
+        final_args = [ctx] + self.args
+        return func(*final_args)
