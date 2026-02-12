@@ -76,7 +76,7 @@ def llen(ctx, key):
 
 
 @command()
-def lpop(ctx, key, pop_count):
+def lpop(ctx, key, pop_count=None):
     if pop_count is None:
         value = ctx.state.lpop(key)
         if value is None:
