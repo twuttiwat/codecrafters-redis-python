@@ -41,3 +41,10 @@ class ListDict:
     def llen(self, key):
         length = self.dict.get(key, [])
         return len(length)
+
+    def lpop(self, key):
+        values = self.dict.get(key, [])
+        if not values:
+            return None
+        value = values.pop(0)
+        return value

@@ -32,3 +32,7 @@ class State:
     def llen(self, key):
         length = self.list_dict.llen(key)
         return length
+
+    def lpop(self, key):
+        value = self.list_dict.lpop(key)
+        return value

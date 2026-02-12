@@ -75,6 +75,15 @@ def llen(ctx, key):
     return resp.encode_int(length)
 
 
+@command()
+def lpop(ctx, key):
+    value = ctx.state.lpop(key)
+    if value is None:
+        return resp.NULL_BULK_STR
+    else:
+        return resp.encode_bulk_str(value)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
