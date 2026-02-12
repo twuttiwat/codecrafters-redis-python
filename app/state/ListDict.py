@@ -15,6 +15,12 @@ class ListDict:
 
     def range(self, key, start, stop):
         values = self.dict.get(key, [])
+
+        if start < 0:
+            start = max(0, len(values) + start)
+        if stop < 0:
+            stop = max(0, len(values) + stop)
+
         if start >= len(values):
             return []
         if stop >= len(values):
