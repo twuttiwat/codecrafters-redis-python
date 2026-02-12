@@ -1,24 +1,26 @@
-from types import SimpleNamespace
-
 import app.resp as resp
 
 COMMANDS = {}
 
+
 def command(name=None):
     def decorator(f):
         cmd_name = name if name is not None else f.__name__.lower()
-        print(f"cmd_name: {cmd_name}")
         COMMANDS[cmd_name] = f
         return f
+
     return decorator
+
 
 @command()
 def ping(ctx):
     return b"+PONG\r\n"
 
+
 @command()
 def echo(ctx, message):
     return resp.encode_bulk_str(message)
+
 
 @command()
 def set(ctx, key, value, exp_unit=None, exp_val=None):
@@ -33,6 +35,7 @@ def set(ctx, key, value, exp_unit=None, exp_val=None):
     ctx.state.set(key, value, expired_in_ms)
     return resp.OK
 
+
 @command()
 def get(ctx, key):
     value = ctx.state.get(key)
@@ -40,6 +43,13 @@ def get(ctx, key):
         return resp.NULL_BULK_STR
     else:
         return resp.encode_bulk_str(value)
+
+
+@command()
+def rpush(ctx, key, value):
+    count = ctx.state.rpush(key, value)
+    return resp.encode_int(count)
+
 
 class Command:
     def __init__(self, name, args):
