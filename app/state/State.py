@@ -36,3 +36,7 @@ class State:
     def lpop(self, key):
         value = self.list_dict.lpop(key)
         return value
+
+    def lpop_many(self, key, pop_count):
+        values = self.list_dict.lpop_many(key, pop_count)
+        return values

@@ -44,7 +44,21 @@ class ListDict:
 
     def lpop(self, key):
         values = self.dict.get(key, [])
+        if len(values) == 0:
+            return None
+
+        return values.pop(0)
+
+    def lpop_many(self, key, pop_count):
+        values = self.dict.get(key, [])
         if not values:
             return None
-        value = values.pop(0)
-        return value
+
+        if pop_count > len(values):
+            pop_count = len(values)
+
+        popped_values = []
+        for _ in range(pop_count):
+            popped_values.append(values.pop(0))
+
+        return popped_values

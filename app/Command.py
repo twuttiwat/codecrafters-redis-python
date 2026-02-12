@@ -76,12 +76,16 @@ def llen(ctx, key):
 
 
 @command()
-def lpop(ctx, key):
-    value = ctx.state.lpop(key)
-    if value is None:
-        return resp.NULL_BULK_STR
+def lpop(ctx, key, pop_count):
+    if pop_count is None:
+        value = ctx.state.lpop(key)
+        if value is None:
+            return resp.NULL_BULK_STR
+        else:
+            return resp.encode_bulk_str(value)
     else:
-        return resp.encode_bulk_str(value)
+        values = ctx.state.lpop_many(key, int(pop_count))
+        return resp.encode_array(values)
 
 
 class Command:
