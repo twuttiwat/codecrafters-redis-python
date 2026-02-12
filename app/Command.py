@@ -54,6 +54,12 @@ def rpush(ctx, key, value, *values):
     return resp.encode_int(count)
 
 
+@command()
+def lrange(ctx, key, start, stop):
+    values = ctx.state.lrange(key, int(start), int(stop))
+    return resp.encode_array(values)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name

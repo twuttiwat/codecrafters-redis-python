@@ -18,3 +18,7 @@ class State:
 
     def rpush_many(self, key, values):
         return self.list_dict.push_many(key, values)
+
+    def lrange(self, key, start, stop):
+        values = self.list_dict.range(key, start, stop)
+        return values

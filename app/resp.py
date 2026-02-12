@@ -9,6 +9,12 @@ def decode_command(bytes_data):
     return values
 
 
+def encode_array(values):
+    num_elems = f"*{len(values)}\r\n".encode()
+    elems = b"".join([encode_bulk_str(value) for value in values])
+    return num_elems + elems
+
+
 def encode_bulk_str(str):
     return f"${len(str)}\r\n{str}\r\n".encode()
 
