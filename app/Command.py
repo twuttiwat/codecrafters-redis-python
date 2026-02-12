@@ -69,6 +69,12 @@ def lpush(ctx, key, value, *values):
     return resp.encode_int(count)
 
 
+@command()
+def llen(ctx, key):
+    length = ctx.state.llen(key)
+    return resp.encode_int(length)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name

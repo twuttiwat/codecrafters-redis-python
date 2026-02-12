@@ -28,3 +28,7 @@ class State:
 
     def lpush_many(self, key, values):
         return self.list_dict.lpush_many(key, values)
+
+    def llen(self, key):
+        length = self.list_dict.llen(key)
+        return length

@@ -37,3 +37,7 @@ class ListDict:
         rev_values.reverse()
         self.dict[key] = rev_values + self.dict.get(key, [])
         return len(self.dict[key])
+
+    def llen(self, key):
+        length = self.dict.get(key, [])
+        return len(length)
