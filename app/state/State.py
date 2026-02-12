@@ -15,3 +15,6 @@ class State:
 
     def rpush(self, key, value):
         return self.list_dict.push(key, value)
+
+    def rpush_many(self, key, values):
+        return self.list_dict.push_many(key, values)

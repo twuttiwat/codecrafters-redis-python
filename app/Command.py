@@ -46,8 +46,11 @@ def get(ctx, key):
 
 
 @command()
-def rpush(ctx, key, value):
-    count = ctx.state.rpush(key, value)
+def rpush(ctx, key, value, *values):
+    if len(values) == 0:
+        count = ctx.state.rpush(key, value)
+    else:
+        count = ctx.state.rpush_many(key, [value] + list(values))
     return resp.encode_int(count)
 
 
