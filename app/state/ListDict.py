@@ -5,11 +5,11 @@ from dataclasses import dataclass
 class ListDict:
     dict = {}
 
-    def push(self, key, value):
+    def rpush(self, key, value):
         self.dict[key] = self.dict.get(key, []) + [value]
         return len(self.dict[key])
 
-    def push_many(self, key, values):
+    def rpush_many(self, key, values):
         self.dict[key] = self.dict.get(key, []) + values
         return len(self.dict[key])
 
@@ -27,3 +27,13 @@ class ListDict:
             stop = len(values) - 1
 
         return values[start : stop + 1]
+
+    def lpush(self, key, value):
+        self.dict[key] = [value] + self.dict.get(key, [])
+        return len(self.dict[key])
+
+    def lpush_many(self, key, values):
+        rev_values = values[:]
+        rev_values.reverse()
+        self.dict[key] = rev_values + self.dict.get(key, [])
+        return len(self.dict[key])

@@ -60,6 +60,15 @@ def lrange(ctx, key, start, stop):
     return resp.encode_array(values)
 
 
+@command()
+def lpush(ctx, key, value, *values):
+    if len(values) == 0:
+        count = ctx.state.lpush(key, value)
+    else:
+        count = ctx.state.lpush_many(key, [value] + list(values))
+    return resp.encode_int(count)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name

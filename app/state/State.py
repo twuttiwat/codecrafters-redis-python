@@ -14,11 +14,17 @@ class State:
         return self.key_value_dict.get(key)
 
     def rpush(self, key, value):
-        return self.list_dict.push(key, value)
+        return self.list_dict.rpush(key, value)
 
     def rpush_many(self, key, values):
-        return self.list_dict.push_many(key, values)
+        return self.list_dict.rpush_many(key, values)
 
     def lrange(self, key, start, stop):
         values = self.list_dict.range(key, start, stop)
         return values
+
+    def lpush(self, key, value):
+        return self.list_dict.lpush(key, value)
+
+    def lpush_many(self, key, values):
+        return self.list_dict.lpush_many(key, values)
