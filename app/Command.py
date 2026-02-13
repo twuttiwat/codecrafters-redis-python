@@ -97,6 +97,15 @@ async def blpop(ctx, key, timeout):
         return resp.encode_array([key, value])
 
 
+@command()
+async def type(ctx, key):
+    value = ctx.state.type(key)
+    if value is None:
+        return resp.encode_simple_str("none")
+    else:
+        return resp.encode_simple_str("string")
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name

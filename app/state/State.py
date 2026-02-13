@@ -44,3 +44,6 @@ class State:
     async def blpop(self, key, timeout):
         value = await self.list_dict.blpop(key, timeout)
         return value
+
+    def type(self, key):
+        return self.key_value_dict.type(key)

@@ -22,3 +22,7 @@ def encode_bulk_str(str):
 
 def encode_int(num):
     return f":{num}\r\n".encode()
+
+
+def encode_simple_str(str):
+    return f"+{str}\r\n".encode()
