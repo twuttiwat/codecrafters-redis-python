@@ -90,7 +90,7 @@ async def lpop(ctx, key, pop_count=None):
 
 @command()
 async def blpop(ctx, key, timeout):
-    value = await ctx.state.blpop(key, int(timeout))
+    value = await ctx.state.blpop(key, float(timeout))
     if value is None:
         return resp.NULL_ARRAY
     else:
