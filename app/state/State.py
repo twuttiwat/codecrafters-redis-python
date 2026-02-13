@@ -40,3 +40,7 @@ class State:
     def lpop_many(self, key, pop_count):
         values = self.list_dict.lpop_many(key, pop_count)
         return values
+
+    async def blpop(self, key, timeout):
+        value = await self.list_dict.blpop(key, timeout)
+        return value

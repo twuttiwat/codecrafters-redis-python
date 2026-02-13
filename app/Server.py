@@ -23,7 +23,7 @@ class Server:
 
             command = Command.parse(bytes_data)
             ctx = SimpleNamespace(state=self.state)
-            response = command.dispatch(ctx)
+            response = await command.dispatch(ctx)
 
             writer.write(response)
             await writer.drain()

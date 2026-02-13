@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 
 
@@ -44,7 +45,7 @@ class ListDict:
 
     def lpop(self, key):
         values = self.dict.get(key, [])
-        if len(values) == 0:
+        if not values:
             return None
 
         return values.pop(0)
@@ -62,3 +63,19 @@ class ListDict:
             popped_values.append(values.pop(0))
 
         return popped_values
+
+    async def blpop(self, key, timeout):
+        async def wait_for_data():
+            start = asyncio.get_event_loop().time()
+            while not self.dict.get(key):
+                if timeout > 0 and asyncio.get_event_loop().time() - start >= timeout:
+                    raise asyncio.TimeoutError("List is still empty after timeout")
+                await asyncio.sleep(0.1)
+
+        try:
+            await wait_for_data()
+        except TimeoutError:
+            return None
+
+        values = self.dict[key]
+        return values.pop(0)

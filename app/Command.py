@@ -13,17 +13,17 @@ def command(name=None):
 
 
 @command()
-def ping(ctx):
+async def ping(ctx):
     return b"+PONG\r\n"
 
 
 @command()
-def echo(ctx, message):
+async def echo(ctx, message):
     return resp.encode_bulk_str(message)
 
 
 @command()
-def set(ctx, key, value, exp_unit=None, exp_val=None):
+async def set(ctx, key, value, exp_unit=None, exp_val=None):
     expired_in_ms = None
     if exp_unit and exp_val:
         match exp_unit.upper():
@@ -37,7 +37,7 @@ def set(ctx, key, value, exp_unit=None, exp_val=None):
 
 
 @command()
-def get(ctx, key):
+async def get(ctx, key):
     value = ctx.state.get(key)
     if value is None:
         return resp.NULL_BULK_STR
@@ -46,7 +46,7 @@ def get(ctx, key):
 
 
 @command()
-def rpush(ctx, key, value, *values):
+async def rpush(ctx, key, value, *values):
     if len(values) == 0:
         count = ctx.state.rpush(key, value)
     else:
@@ -55,13 +55,13 @@ def rpush(ctx, key, value, *values):
 
 
 @command()
-def lrange(ctx, key, start, stop):
+async def lrange(ctx, key, start, stop):
     values = ctx.state.lrange(key, int(start), int(stop))
     return resp.encode_array(values)
 
 
 @command()
-def lpush(ctx, key, value, *values):
+async def lpush(ctx, key, value, *values):
     if len(values) == 0:
         count = ctx.state.lpush(key, value)
     else:
@@ -70,13 +70,13 @@ def lpush(ctx, key, value, *values):
 
 
 @command()
-def llen(ctx, key):
+async def llen(ctx, key):
     length = ctx.state.llen(key)
     return resp.encode_int(length)
 
 
 @command()
-def lpop(ctx, key, pop_count=None):
+async def lpop(ctx, key, pop_count=None):
     if pop_count is None:
         value = ctx.state.lpop(key)
         if value is None:
@@ -86,6 +86,15 @@ def lpop(ctx, key, pop_count=None):
     else:
         values = ctx.state.lpop_many(key, int(pop_count))
         return resp.encode_array(values)
+
+
+@command()
+async def blpop(ctx, key, timeout):
+    value = await ctx.state.blpop(key, int(timeout))
+    if value is None:
+        return resp.NULL_ARRAY
+    else:
+        return resp.encode_array([key, value])
 
 
 class Command:
@@ -105,10 +114,11 @@ class Command:
             case _:
                 raise ValueError("Invalid or empty RESP command array")
 
-    def dispatch(self, ctx):
+    async def dispatch(self, ctx):
         func = COMMANDS.get(self.name.lower())
         if not func:
             return "Unknown command"
 
         final_args = [ctx] + self.args
-        return func(*final_args)
+        result = await func(*final_args)
+        return result
