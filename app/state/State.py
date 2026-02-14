@@ -1,11 +1,13 @@
 from app.state.KeyValueDict import KeyValueDict
 from app.state.ListDict import ListDict
+from app.state.StreamDict import StreamDict
 
 
 class State:
     def __init__(self):
         self.key_value_dict = KeyValueDict()
         self.list_dict = ListDict()
+        self.stream_dict = StreamDict()
 
     def set(self, key, value, expired_in_ms=None):
         self.key_value_dict.set(key, value, expired_in_ms)
@@ -46,4 +48,13 @@ class State:
         return value
 
     def type(self, key):
-        return self.key_value_dict.type(key)
+        if self.key_value_dict.has_key(key):
+            return "string"
+        elif self.stream_dict.has_key(key):
+            return "stream"
+        else:
+            return None
+
+    def xadd(self, key, id, *fields):
+        result = self.stream_dict.xadd(key, id, *fields)
+        return result

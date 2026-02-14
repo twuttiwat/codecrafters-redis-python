@@ -34,8 +34,5 @@ class KeyValueDict:
         elapsed_ms = (get_at - set_at) * 1000
         return elapsed_ms > expired_in_ms
 
-    def type(self, key):
-        if key in self.dict:
-            return "string"
-        else:
-            return None
+    def has_key(self, key):
+        return key in self.dict
