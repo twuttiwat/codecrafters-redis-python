@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 
 
@@ -26,7 +27,29 @@ class StreamDict:
         else:
             return True, None
 
-    def gen_entry_id(self, stream, entry_id):
+    def gen_entry_seq(self, stream, entry_ms):
+        seq = "0"
+        if stream:
+            for curr_entry in stream[::-1]:
+                [curr_ms, curr_seq] = curr_entry[0].split("-")
+                if curr_ms == entry_ms:
+                    seq = str(int(curr_seq) + 1)
+                    break
+        return seq
+
+    def gen_full_entry_id(self, stream):
+        unix_timestamp_ms = str(int(time.time() * 1000))
+        seq = "0"
+        if stream:
+            for curr_entry in stream[::-1]:
+                [curr_ms, curr_seq] = curr_entry[0].split("-")
+                if curr_ms == unix_timestamp_ms:
+                    seq = int(curr_seq) + 1
+                    break
+
+        return f"{unix_timestamp_ms}-{seq}"
+
+    def gen_partial_entry_id(self, stream, entry_id):
         [ms, _] = entry_id.split("-")
         seq = "0"
         if stream:
@@ -44,8 +67,10 @@ class StreamDict:
     def xadd(self, stream_key, entry_id, *fields):
         stream = self.dict.setdefault(stream_key, [])
 
-        if entry_id.endswith("*"):
-            entry_id = self.gen_entry_id(stream, entry_id)
+        if entry_id == "*":
+            entry_id = self.gen_full_entry_id(stream)
+        elif entry_id.endswith("-*"):
+            entry_id = self.gen_partial_entry_id(stream, entry_id)
         else:
             is_valid, error_message = self.validate_entry_id(stream, entry_id)
             if not is_valid:
