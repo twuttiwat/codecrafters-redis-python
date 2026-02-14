@@ -5,8 +5,34 @@ from dataclasses import dataclass
 class StreamDict:
     dict = {}
 
+    def validate_entry_id(self, stream, entry_id):
+        [ms, seq] = entry_id.split("-")
+        last_ms = last_seq = "0"
+        if stream:
+            [last_ms, last_seq] = stream[-1][0].split("-")
+
+        def id_less_than_or_equal_last():
+            return int(ms) < int(last_ms) or (
+                int(ms) == int(last_ms) and int(seq) <= int(last_seq)
+            )
+
+        if entry_id == "0-0":
+            return False, "ERR The ID specified in XADD must be greater than 0-0"
+        elif id_less_than_or_equal_last():
+            return (
+                False,
+                "ERR The ID specified in XADD is equal or smaller than the target stream top item",
+            )
+        else:
+            return True, None
+
     def xadd(self, stream_key, entry_id, *fields):
         stream = self.dict.setdefault(stream_key, [])
+
+        is_valid, error_message = self.validate_entry_id(stream, entry_id)
+        if not is_valid:
+            raise ValueError(error_message)
+
         key_value_pairs = list(zip(fields[::2], fields[1::2]))
         stream.append((entry_id, key_value_pairs))
         return entry_id

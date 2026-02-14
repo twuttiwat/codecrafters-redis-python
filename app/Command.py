@@ -108,14 +108,12 @@ async def type(ctx, key):
 
 @command()
 async def xadd(ctx, key, id, *fields):
-    result = ctx.state.xadd(key, id, *fields)
-    return resp.encode_bulk_str(result)
-
-
-@command()
-async def xdel(ctx, key, *ids):
-    result = ctx.state.xdel(key, *ids)
-    return resp.encode_int(result)
+    try:
+        result = ctx.state.xadd(key, id, *fields)
+        return resp.encode_bulk_str(result)
+    except ValueError as e:
+        print(f"Error adding to stream: {e}")
+        return resp.encode_simple_err(str(e))
 
 
 class Command:
