@@ -14,7 +14,7 @@ class ListDict:
         self.dict[key] = self.dict.get(key, []) + values
         return len(self.dict[key])
 
-    def range(self, key, start, stop):
+    def lrange(self, key, start, stop):
         values = self.dict.get(key, [])
 
         if start < 0:

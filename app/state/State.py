@@ -8,44 +8,13 @@ class State:
         self.key_value_dict = KeyValueDict()
         self.list_dict = ListDict()
         self.stream_dict = StreamDict()
+        self._states = [self.key_value_dict, self.list_dict, self.stream_dict]
 
-    def set(self, key, value, expired_in_ms=None):
-        self.key_value_dict.set(key, value, expired_in_ms)
-
-    def get(self, key):
-        return self.key_value_dict.get(key)
-
-    def rpush(self, key, value):
-        return self.list_dict.rpush(key, value)
-
-    def rpush_many(self, key, values):
-        return self.list_dict.rpush_many(key, values)
-
-    def lrange(self, key, start, stop):
-        values = self.list_dict.range(key, start, stop)
-        return values
-
-    def lpush(self, key, value):
-        return self.list_dict.lpush(key, value)
-
-    def lpush_many(self, key, values):
-        return self.list_dict.lpush_many(key, values)
-
-    def llen(self, key):
-        length = self.list_dict.llen(key)
-        return length
-
-    def lpop(self, key):
-        value = self.list_dict.lpop(key)
-        return value
-
-    def lpop_many(self, key, pop_count):
-        values = self.list_dict.lpop_many(key, pop_count)
-        return values
-
-    async def blpop(self, key, timeout):
-        value = await self.list_dict.blpop(key, timeout)
-        return value
+    def __getattr__(self, name):
+        for state in self._states:
+            if hasattr(state, name):
+                return getattr(state, name)
+        raise AttributeError(f"'State' object has no attribute '{name}'")
 
     def type(self, key):
         if self.key_value_dict.has_key(key):
@@ -54,11 +23,3 @@ class State:
             return "stream"
         else:
             return None
-
-    def xadd(self, key, id, *fields):
-        result = self.stream_dict.xadd(key, id, *fields)
-        return result
-
-    def xrange(self, key, start, stop):
-        values = self.stream_dict.xrange(key, start, stop)
-        return values

@@ -134,7 +134,12 @@ class StreamDict:
 
     def xrange(self, stream_key, start, end):
         stream = self.dict.get(stream_key, [])
-        start_id, end_id = EntryId.parse(start, stream), EntryId.parse(end, stream)
+
+        if start == "-":
+            start_id = EntryId(0, 1)
+            end_id = EntryId.parse(end, stream)
+        else:
+            start_id, end_id = EntryId.parse(start, stream), EntryId.parse(end, stream)
 
         result = []
         for entry_id, fields in stream:
