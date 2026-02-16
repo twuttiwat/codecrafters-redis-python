@@ -100,6 +100,12 @@ INITIAL_ID = EntryId(0, 0)
 class Entry:
     id: EntryId
     fields: list[str]
+    # cmp_funs: list[str] = ["__lt__", "__gt__", "__eq__", "__ne__", "__le__", "__ge__"]
+
+    # def __getattr__(self, name):
+    #     if name in self.cmp_funs:
+    #         return getattr(self.id, name)
+    #     return getattr(self, name)
 
 
 class StreamDict:
@@ -155,5 +161,21 @@ class StreamDict:
         for entry in stream:
             if start_id <= entry.id <= end_id:
                 result.append([str(entry.id), entry.fields])
+
+        return result
+
+    def xread(self, stream_key, id):
+        stream = self.dict.get(stream_key, [])
+
+        entry_id = EntryId.parse(id, stream)
+
+        read_entries = []
+        for entry in stream:
+            if entry.id > entry_id:
+                read_entries.append([str(entry.id), entry.fields])
+                break
+        result = [[stream_key, read_entries]]
+
+        print(f"XREAD {stream_key} {id} -> {result}")
 
         return result

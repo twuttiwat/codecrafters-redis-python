@@ -122,6 +122,12 @@ async def xrange(ctx, key, start, end):
     return resp.encode_array(result)
 
 
+@command()
+async def xread(ctx, _, key, id):
+    result = ctx.state.xread(key, id)
+    return resp.encode_array(result)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
