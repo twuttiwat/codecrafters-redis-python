@@ -123,8 +123,15 @@ async def xrange(ctx, key, start, end):
 
 
 @command()
-async def xread(ctx, _, key, id):
-    result = ctx.state.xread(key, id)
+async def xread(ctx, _, *keys_ids):
+    key_id_pairs = []
+    for i in range(len(keys_ids) // 2):
+        key = keys_ids[i]
+        id = keys_ids[i + len(keys_ids) // 2]
+        key_id_pairs.append((key, id))
+
+    result = ctx.state.xread(key_id_pairs)
+
     return resp.encode_array(result)
 
 

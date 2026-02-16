@@ -164,18 +164,19 @@ class StreamDict:
 
         return result
 
-    def xread(self, stream_key, id):
-        stream = self.dict.get(stream_key, [])
+    def xread(self, stream_key_id_pairs):
+        result = []
+        for stream_key, id in stream_key_id_pairs:
+            stream = self.dict.get(stream_key, [])
 
-        entry_id = EntryId.parse(id, stream)
+            entry_id = EntryId.parse(id, stream)
 
-        read_entries = []
-        for entry in stream:
-            if entry.id > entry_id:
-                read_entries.append([str(entry.id), entry.fields])
-                break
-        result = [[stream_key, read_entries]]
-
-        print(f"XREAD {stream_key} {id} -> {result}")
+            read_entries = []
+            for entry in stream:
+                if entry.id > entry_id:
+                    read_entries.append([str(entry.id), entry.fields])
+                    break
+            stream_result = [stream_key, read_entries]
+            result.append(stream_result)
 
         return result
