@@ -46,9 +46,9 @@ class EntryId:
         seq = 0
         print(f"stream {stream}")
         if stream:
-            for entry_id, _ in stream[::-1]:
-                if entry_id.ms == entry_ms:
-                    seq = entry_id.seq + 1
+            for entry in stream[::-1]:
+                if entry.id.ms == entry_ms:
+                    seq = entry.id.seq + 1
                     break
         return seq
 
@@ -71,13 +71,15 @@ class EntryId:
             return EntryId(int(ms), int(seq))
 
     @staticmethod
-    def parse(raw_id, stream):
+    def parse(raw_id, stream) -> EntryId:
 
-        def gen_id():
+        def gen_id() -> EntryId:
             if raw_id == "*":
                 return EntryId.gen_full_entry_id(stream)
             elif raw_id.endswith("-*"):
                 return EntryId.gen_partial_entry_id(stream, raw_id)
+            else:
+                raise ValueError("Invalid Generate ID format")
 
         if "*" in raw_id:
             return gen_id()
@@ -95,8 +97,13 @@ INITIAL_ID = EntryId(0, 0)
 
 
 @dataclass
+class Entry:
+    id: EntryId
+    fields: list[str]
+
+
 class StreamDict:
-    dict = {}
+    dict: dict[str, list[Entry]] = {}
 
     def has_key(self, key):
         return key in self.dict
@@ -108,9 +115,7 @@ class StreamDict:
         def validate_add_id():
             last_entry_id = INITIAL_ID
             if stream:
-                last_entry_id = stream[-1][0]
-
-            print(f"entry_id: {entry_id}, last_entry_id: {last_entry_id}")
+                last_entry_id = stream[-1].id
 
             if entry_id == INITIAL_ID:
                 return False, "ERR The ID specified in XADD must be greater than 0-0"
@@ -127,25 +132,28 @@ class StreamDict:
             raise ValueError(error_message)
 
         entry_id = EntryId.parse(raw_entry_id, stream)
-
-        stream.append([entry_id, list(fields)])
+        entry = Entry(entry_id, list(fields))
+        stream.append(entry)
 
         return str(entry_id)
 
     def xrange(self, stream_key, start, end):
         stream = self.dict.get(stream_key, [])
 
+        start_id, end_id = None, None
         if start == "-":
             start_id = EntryId(0, 1)
+        if end == "+":
+            end_id = stream[-1].id
+
+        if start_id is None:
+            start_id = EntryId.parse(start, stream)
+        if end_id is None:
             end_id = EntryId.parse(end, stream)
-        else:
-            start_id, end_id = EntryId.parse(start, stream), EntryId.parse(end, stream)
 
         result = []
-        for entry_id, fields in stream:
-            if start_id <= entry_id <= end_id:
-                result.append([str(entry_id), fields])
-
-        print(f"xrange result: {result}")
+        for entry in stream:
+            if start_id <= entry.id <= end_id:
+                result.append([str(entry.id), entry.fields])
 
         return result
