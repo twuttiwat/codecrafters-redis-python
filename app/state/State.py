@@ -58,3 +58,7 @@ class State:
     def xadd(self, key, id, *fields):
         result = self.stream_dict.xadd(key, id, *fields)
         return result
+
+    def xrange(self, key, start, stop):
+        values = self.stream_dict.xrange(key, start, stop)
+        return values

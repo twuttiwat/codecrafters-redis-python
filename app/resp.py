@@ -10,9 +10,24 @@ def decode_command(bytes_data):
     return values
 
 
-def encode_array(values):
+def encode_array_str(values):
     num_elems = f"*{len(values)}\r\n".encode()
     elems = b"".join([encode_bulk_str(value) for value in values])
+    return num_elems + elems
+
+
+def encode_array(values):
+    num_elems = f"*{len(values)}\r\n".encode()
+    elems = b""
+    for elem in values:
+        print(f"elem: {elem}")
+        if isinstance(elem, list):
+            elems += encode_array(elem)
+        elif isinstance(elem, int):
+            elems += encode_int(elem)
+        else:
+            elems += encode_bulk_str(elem)
+
     return num_elems + elems
 
 

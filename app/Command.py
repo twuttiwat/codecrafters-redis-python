@@ -57,7 +57,7 @@ async def rpush(ctx, key, value, *values):
 @command()
 async def lrange(ctx, key, start, stop):
     values = ctx.state.lrange(key, int(start), int(stop))
-    return resp.encode_array(values)
+    return resp.encode_array_str(values)
 
 
 @command()
@@ -85,7 +85,7 @@ async def lpop(ctx, key, pop_count=None):
             return resp.encode_bulk_str(value)
     else:
         values = ctx.state.lpop_many(key, int(pop_count))
-        return resp.encode_array(values)
+        return resp.encode_array_str(values)
 
 
 @command()
@@ -94,7 +94,7 @@ async def blpop(ctx, key, timeout):
     if value is None:
         return resp.NULL_ARRAY
     else:
-        return resp.encode_array([key, value])
+        return resp.encode_array_str([key, value])
 
 
 @command()
@@ -114,6 +114,12 @@ async def xadd(ctx, key, id, *fields):
     except ValueError as e:
         print(f"Error adding to stream: {e}")
         return resp.encode_simple_err(str(e))
+
+
+@command()
+async def xrange(ctx, key, start, end):
+    result = ctx.state.xrange(key, start, end)
+    return resp.encode_array(result)
 
 
 class Command:
