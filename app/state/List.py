@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class ListDict:
+class List:
     dict = {}
 
     def rpush(self, key, value):

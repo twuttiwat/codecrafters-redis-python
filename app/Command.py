@@ -155,7 +155,10 @@ async def xread(ctx, sub_cmd, *args):
 
 @command()
 async def incr(ctx, key):
-    result = ctx.state.incr(key)
+    try:
+        result = ctx.state.incr(key)
+    except ValueError as e:
+        return resp.encode_simple_err(e)
     return resp.encode_int(result)
 
 

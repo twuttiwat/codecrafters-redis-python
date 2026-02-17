@@ -109,7 +109,7 @@ class Entry:
     #     return getattr(self, name)
 
 
-class StreamDict:
+class Stream:
     dict: dict[str, list[Entry]] = {}
 
     def has_key(self, key):

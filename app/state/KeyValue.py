@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class KeyValueDict:
+class KeyValue:
     dict = {}
 
     def set(self, key, value, expired_in_ms=None):
@@ -54,7 +54,10 @@ class KeyValueDict:
             value = "1"
         else:
             value, set_at, expired_in_ms = self.dict[key]
-            value = str(int(value) + 1)
+            if value.isdigit():
+                value = str(int(value) + 1)
+            else:
+                raise ValueError("ERR value is not an integer or out of range")
 
         self.dict[key] = (value, set_at, expired_in_ms)
 
