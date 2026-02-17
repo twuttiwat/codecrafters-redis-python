@@ -9,6 +9,7 @@ class State:
         self.list_dict = List()
         self.stream_dict = Stream()
         self.is_multi = False
+        self.multi_queue = []
         self._states = [self.key_value_dict, self.list_dict, self.stream_dict]
 
     def __getattr__(self, name):
@@ -19,6 +20,12 @@ class State:
 
     def multi(self):
         self.is_multi = True
+
+    def exec(self):
+        results = []
+        for func, args in self.multi_queue:
+            results.extend(func(*args))
+        return results
 
     def type(self, key):
         if self.key_value_dict.has_key(key):

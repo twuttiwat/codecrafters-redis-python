@@ -168,6 +168,19 @@ async def multi(ctx):
     return resp.OK
 
 
+@command()
+async def exec(ctx):
+    if not ctx.state.is_multi:
+        return resp.encode_simple_err("ERR EXEC without MULTI")
+
+    try:
+        results = await ctx.state.exec()
+    except ValueError as e:
+        return resp.encode_simple_err(e)
+
+    return resp.encode_array(results)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
