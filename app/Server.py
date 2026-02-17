@@ -2,31 +2,9 @@ import asyncio
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-import app.resp as resp
 from app.Command import Command
+from app.state.ClientState import ClientState
 from app.state.State import State
-
-
-class ClientState:
-    def __init__(self):
-        self.is_multi = False
-        self.multi_queue = []
-
-    def multi(self):
-        self.is_multi = True
-        return resp.OK
-
-    async def exec(self):
-        if not self.is_multi:
-            raise ValueError("ERR EXEC without MULTI")
-
-        results = []
-        for func, args in self.multi_queue:
-            results.append(await func(*args))
-        self.is_multi = False
-        self.multi_queue = []
-
-        return results
 
 
 class Server:

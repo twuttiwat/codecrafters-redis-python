@@ -176,7 +176,7 @@ async def exec(ctx):
     except ValueError as e:
         return resp.encode_simple_err(e)
 
-    return resp.encode_array(results)
+    return f"*{len(results)}\r\n".encode() + b"".join(results)
 
 
 class Command:
@@ -204,8 +204,7 @@ class Command:
         final_args = [ctx] + self.args
         if ctx.client_state.is_multi and self.name.upper() != "EXEC":
             print(f"Queued command: {self.name} with {self.args}")
-            ctx.client_state.multi_queue.append((func, final_args))
-            return resp.encode_simple_str("QUEUED")
+            return ctx.client_state.queue_command(func, final_args)
         else:
             result = await func(*final_args)
             return result
