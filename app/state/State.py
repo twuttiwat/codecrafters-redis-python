@@ -1,6 +1,6 @@
-from app.state.KeyValueDict import KeyValue
-from app.state.ListDict import List
-from app.state.StreamDict import Stream
+from app.state.KeyValue import KeyValue
+from app.state.List import List
+from app.state.Stream import Stream
 
 
 class State:
