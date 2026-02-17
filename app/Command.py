@@ -170,11 +170,9 @@ async def multi(ctx):
 
 @command()
 async def exec(ctx):
-    if not ctx.state.is_multi:
-        return resp.encode_simple_err("ERR EXEC without MULTI")
-
     try:
         results = await ctx.state.exec()
+        print(f"exec results: {results}")
     except ValueError as e:
         return resp.encode_simple_err(e)
 
@@ -204,7 +202,7 @@ class Command:
             return "Unknown command"
 
         final_args = [ctx] + self.args
-        if ctx.state.is_multi:
+        if ctx.state.is_multi and self.name.upper() != "EXEC":
             ctx.state.multi_queue.append((func, final_args))
             return resp.encode_simple_str("QUEUED")
         else:

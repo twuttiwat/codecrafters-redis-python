@@ -21,10 +21,18 @@ class State:
     def multi(self):
         self.is_multi = True
 
-    def exec(self):
+    async def exec(self):
+        if not self.is_multi:
+            raise ValueError("ERR EXEC without MULTI")
+
         results = []
         for func, args in self.multi_queue:
-            results.extend(func(*args))
+            result = await func(*args)
+            results.extend(result)
+
+        self.is_multi = False
+        self.multi_queue = []
+
         return results
 
     def type(self, key):
