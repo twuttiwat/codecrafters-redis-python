@@ -11,13 +11,10 @@ class KeyValueDict:
         self.dict[key] = (value, set_at, expired_in_ms)
 
     def get(self, key):
-        dict_value = self.dict.get(key, None)
-        if dict_value is None:
+        if not self.is_valid_key(key):
             return None
 
-        if self.is_expired(key):
-            return None
-
+        dict_value = self.dict[key]
         value, _, _ = dict_value
         return value
 
@@ -36,3 +33,17 @@ class KeyValueDict:
 
     def has_key(self, key):
         return key in self.dict
+
+    def is_valid_key(self, key):
+        dict_value = self.dict.get(key, None)
+        if dict_value is None or self.is_expired(key):
+            return False
+
+    def incr(self, key):
+        if not self.is_valid_key(key):
+            return None
+
+        value, set_at, expired_in_ms = self.dict[key]
+
+        self.dict[key] = (int(value) + 1, set_at, expired_in_ms)
+        return int(value) + 1

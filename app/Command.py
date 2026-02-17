@@ -153,6 +153,12 @@ async def xread(ctx, sub_cmd, *args):
         return resp.encode_array(result)
 
 
+@command()
+async def incr(ctx, key):
+    result = ctx.state.incr(key)
+    return resp.encode_int(result)
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
