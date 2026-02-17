@@ -172,11 +172,19 @@ async def multi(ctx):
 async def exec(ctx):
     try:
         results = await ctx.client_state.exec()
-        print(f"exec results: {results}")
     except ValueError as e:
         return resp.encode_simple_err(e)
 
     return f"*{len(results)}\r\n".encode() + b"".join(results)
+
+
+@command()
+async def discard(ctx):
+    try:
+        ctx.client_state.discard()
+        return resp.OK
+    except ValueError as e:
+        return resp.encode_simple_err(e)
 
 
 class Command:
@@ -196,13 +204,23 @@ class Command:
             case _:
                 raise ValueError("Invalid or empty RESP command array")
 
+    def is_queued(self, fn_name):
+        return fn_name.upper() != "EXEC" and fn_name.upper() != "DISCARD"
+
     async def dispatch(self, ctx):
         func = COMMANDS.get(self.name.lower())
         if not func:
             return "Unknown command"
 
+        def is_queued():
+            return (
+                ctx.client_state.is_multi
+                and self.name.upper() != "EXEC"
+                and self.name.upper() != "DISCARD"
+            )
+
         final_args = [ctx] + self.args
-        if ctx.client_state.is_multi and self.name.upper() != "EXEC":
+        if is_queued():
             print(f"Queued command: {self.name} with {self.args}")
             return ctx.client_state.queue_command(func, final_args)
         else:

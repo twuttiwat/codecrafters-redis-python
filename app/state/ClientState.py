@@ -24,3 +24,10 @@ class ClientState:
         self.multi_queue = []
 
         return results
+
+    def discard(self):
+        if not self.is_multi:
+            raise ValueError("ERR DISCARD without MULTI")
+
+        self.is_multi = False
+        self.multi_queue = []
