@@ -45,10 +45,17 @@ class KeyValueDict:
         return True
 
     def incr(self, key):
-        if not self.is_valid_key(key):
+        if self.is_expired(key):
             return None
 
-        value, set_at, expired_in_ms = self.dict[key]
+        set_at, expired_in_ms = None, None
+        dict_value = self.dict.get(key, None)
+        if dict_value is None:
+            value = "1"
+        else:
+            value, set_at, expired_in_ms = self.dict[key]
+            value = str(int(value) + 1)
 
-        self.dict[key] = (int(value) + 1, set_at, expired_in_ms)
-        return int(value) + 1
+        self.dict[key] = (value, set_at, expired_in_ms)
+
+        return int(value)
