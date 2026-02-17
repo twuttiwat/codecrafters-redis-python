@@ -164,14 +164,14 @@ async def incr(ctx, key):
 
 @command()
 async def multi(ctx):
-    ctx.state.multi()
+    ctx.client_state.multi()
     return resp.OK
 
 
 @command()
 async def exec(ctx):
     try:
-        results = await ctx.state.exec()
+        results = await ctx.client_state.exec()
         print(f"exec results: {results}")
     except ValueError as e:
         return resp.encode_simple_err(e)
@@ -202,8 +202,9 @@ class Command:
             return "Unknown command"
 
         final_args = [ctx] + self.args
-        if ctx.state.is_multi and self.name.upper() != "EXEC":
-            ctx.state.multi_queue.append((func, final_args))
+        if ctx.client_state.is_multi and self.name.upper() != "EXEC":
+            print(f"Queued command: {self.name} with {self.args}")
+            ctx.client_state.multi_queue.append((func, final_args))
             return resp.encode_simple_str("QUEUED")
         else:
             result = await func(*final_args)
