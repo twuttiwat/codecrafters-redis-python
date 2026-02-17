@@ -197,6 +197,10 @@ class StreamDict:
             stream = self.dict.get(key, [])
             return any(entry.id > EntryId.parse(id, stream) for entry in stream)
 
+        if id == "$":
+            stream = self.dict.get(key, [])
+            id = str(stream[-1].id) if stream else "0-0"
+
         try:
             await self.wait_for(stream_has_id, timeout_ms)
         except TimeoutError:
