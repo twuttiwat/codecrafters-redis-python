@@ -36,8 +36,13 @@ class KeyValueDict:
 
     def is_valid_key(self, key):
         dict_value = self.dict.get(key, None)
-        if dict_value is None or self.is_expired(key):
+        if dict_value is None:
             return False
+
+        if self.is_expired(key):
+            return False
+
+        return True
 
     def incr(self, key):
         if not self.is_valid_key(key):
