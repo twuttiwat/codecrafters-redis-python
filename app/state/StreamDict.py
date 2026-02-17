@@ -1,3 +1,4 @@
+import asyncio
 import time
 from dataclasses import dataclass
 
@@ -178,5 +179,39 @@ class StreamDict:
                     break
             stream_result = [stream_key, read_entries]
             result.append(stream_result)
+
+        return result
+
+    async def wait_for(self, fn, timeout_ms):
+        start = asyncio.get_event_loop().time()
+        while not fn():
+            if timeout_ms > 0 and asyncio.get_event_loop().time() - start >= (
+                timeout_ms / 1000
+            ):
+                raise asyncio.TimeoutError("No data after timeout")
+            await asyncio.sleep(0.1)
+
+    async def xread_block(self, timeout_ms, key, id):
+
+        def stream_has_id():
+            stream = self.dict.get(key, [])
+            return any(entry.id > EntryId.parse(id, stream) for entry in stream)
+
+        try:
+            await self.wait_for(stream_has_id, timeout_ms)
+        except TimeoutError:
+            return None
+
+        result = []
+        stream = self.dict.get(key, [])
+        entry_id = EntryId.parse(id, stream)
+        read_entries = []
+        for entry in stream:
+            if entry.id > entry_id:
+                read_entries.append([str(entry.id), entry.fields])
+                break
+        result.append([key, read_entries])
+
+        print(f"xread_block result: {result}")
 
         return result

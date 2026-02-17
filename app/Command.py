@@ -123,16 +123,34 @@ async def xrange(ctx, key, start, end):
 
 
 @command()
-async def xread(ctx, _, *keys_ids):
-    key_id_pairs = []
-    for i in range(len(keys_ids) // 2):
-        key = keys_ids[i]
-        id = keys_ids[i + len(keys_ids) // 2]
-        key_id_pairs.append((key, id))
+async def xread(ctx, sub_cmd, *args):
+    def get_key_id_pairs(keys_ids):
+        keys, ids = keys_ids[: len(keys_ids) // 2], keys_ids[len(keys_ids) // 2 :]
+        return list(zip(keys, ids))
 
-    result = ctx.state.xread(key_id_pairs)
+    def xread_stream():
+        key_id_pairs = get_key_id_pairs(args)
+        return ctx.state.xread(key_id_pairs)
 
-    return resp.encode_array(result)
+    async def xread_block(timeout_ms, key, id):
+        result = await ctx.state.xread_block(timeout_ms, key, id)
+        return result
+
+    result = None
+    match sub_cmd.upper():
+        case "STREAM" | "STREAMS":
+            result = xread_stream()
+        case "BLOCK":
+            timeout_ms = int(args[0])
+            key, id = args[2:4]
+            result = await xread_block(timeout_ms, key, id)
+        case _:
+            raise ValueError(f"Invalid subcommand: {sub_cmd}")
+
+    if result is None:
+        return resp.NULL_ARRAY
+    else:
+        return resp.encode_array(result)
 
 
 class Command:
