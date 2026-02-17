@@ -162,6 +162,12 @@ async def incr(ctx, key):
     return resp.encode_int(result)
 
 
+@command()
+async def multi(ctx):
+    ctx.state.multi()
+    return resp.OK
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
@@ -185,5 +191,9 @@ class Command:
             return "Unknown command"
 
         final_args = [ctx] + self.args
-        result = await func(*final_args)
-        return result
+        if ctx.state.is_multi:
+            ctx.state.multi_queue.append((func, final_args))
+            return resp.encode_simple_str("QUEUED")
+        else:
+            result = await func(*final_args)
+            return result

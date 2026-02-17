@@ -8,6 +8,7 @@ class State:
         self.key_value_dict = KeyValue()
         self.list_dict = List()
         self.stream_dict = Stream()
+        self.is_multi = False
         self._states = [self.key_value_dict, self.list_dict, self.stream_dict]
 
     def __getattr__(self, name):
@@ -15,6 +16,9 @@ class State:
             if hasattr(state, name):
                 return getattr(state, name)
         raise AttributeError(f"'State' object has no attribute '{name}'")
+
+    def multi(self):
+        self.is_multi = True
 
     def type(self, key):
         if self.key_value_dict.has_key(key):
