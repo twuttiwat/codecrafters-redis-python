@@ -189,7 +189,11 @@ async def discard(ctx):
 
 @command()
 async def info(ctx, info_name):
-    return resp.encode_bulk_str(f"role:{ctx.role}")
+    replid, offset = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", 0
+    result = (
+        f"role:{ctx.role}\r\nmaster_replid:{replid}\r\nmaster_repl_offset:{offset}\r\n"
+    )
+    return resp.encode_bulk_str(result)
 
 
 class Command:
