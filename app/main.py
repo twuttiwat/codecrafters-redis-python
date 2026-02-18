@@ -14,7 +14,7 @@ async def main():
     except ValueError:
         pass
 
-    await Server().start(port)
+    await Server("master").start(port)
 
 
 if __name__ == "__main__":

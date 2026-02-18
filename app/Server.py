@@ -8,8 +8,9 @@ from app.state.State import State
 
 
 class Server:
-    def __init__(self):
+    def __init__(self, role):
         self.state = State()
+        self.role = role
         self.server = None
 
     async def handle_client(self, reader, writer):
@@ -26,7 +27,9 @@ class Server:
             print(f"Received from {addr}: {bytes_data!r}")
 
             command = Command.parse(bytes_data)
-            ctx = SimpleNamespace(state=self.state, client_state=client_state)
+            ctx = SimpleNamespace(
+                role=self.role, state=self.state, client_state=client_state
+            )
             response = await command.dispatch(ctx)
 
             writer.write(response)

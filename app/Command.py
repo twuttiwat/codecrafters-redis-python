@@ -187,6 +187,11 @@ async def discard(ctx):
         return resp.encode_simple_err(e)
 
 
+@command()
+async def info(ctx, info_name):
+    return resp.encode_bulk_str(f"role:{ctx.role}")
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
