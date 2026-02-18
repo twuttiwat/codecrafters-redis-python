@@ -36,8 +36,9 @@ class Server:
         writer.close()
         await writer.wait_closed()
 
-    async def start(self):
-        self.server = await asyncio.start_server(self.handle_client, "localhost", 6379)
+    async def start(self, port):
+
+        self.server = await asyncio.start_server(self.handle_client, "localhost", port)
 
         addr = self.server.sockets[0].getsockname()
         print(f"Serving on {addr}")
