@@ -8,9 +8,10 @@ from app.state.State import State
 
 
 class Server:
-    def __init__(self, role):
+    def __init__(self, role, port):
         self.state = State()
         self.role = role
+        self.port = port
         self.server = None
 
     async def handle_client(self, reader, writer):
@@ -39,9 +40,11 @@ class Server:
         writer.close()
         await writer.wait_closed()
 
-    async def start(self, port):
+    async def start(self):
 
-        self.server = await asyncio.start_server(self.handle_client, "localhost", port)
+        self.server = await asyncio.start_server(
+            self.handle_client, "localhost", self.port
+        )
 
         addr = self.server.sockets[0].getsockname()
         print(f"Serving on {addr}")

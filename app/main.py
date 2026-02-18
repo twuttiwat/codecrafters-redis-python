@@ -8,13 +8,13 @@ async def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
     print("Logs from your program will appear here!")
 
-    port = 6379
-    try:
-        port = int(sys.argv[sys.argv.index("--port") + 1])
-    except ValueError:
-        pass
+    role, port = "master", 6379
+    if "--replicaof" in sys.argv:
+        role = "slave"
+    if "--port" in sys.argv:
+        port = sys.argv[sys.argv.index("--port") + 1]
 
-    await Server("master").start(port)
+    await Server(role, port).start()
 
 
 if __name__ == "__main__":
