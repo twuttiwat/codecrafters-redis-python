@@ -1,3 +1,5 @@
+from imaplib import Commands
+
 import app.resp as resp
 
 COMMANDS = {}
@@ -200,6 +202,13 @@ async def info(ctx, info_name):
 async def replconf(ctx, *args):
     print(f"REPLCONF with args: {args}")
     return resp.OK
+
+
+@command()
+async def psync(ctx, *args):
+    return resp.encode_simple_str(
+        "FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0"
+    )
 
 
 class Command:
