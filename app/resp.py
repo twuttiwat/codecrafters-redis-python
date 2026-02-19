@@ -37,12 +37,12 @@ def encode_bulk_str(str):
     return f"${len(str)}\r\n{str}\r\n".encode()
 
 
-def encode_command(*args):
-    command_array = []
-    for arg in args:
-        command_array.append(str(arg))
+def encode_command(command_str):
+    command_parts = []
+    for command_part in command_str.split():
+        command_parts.append(command_part)
 
-    return encode_array(command_array)
+    return encode_array(command_parts)
 
 
 def encode_int(num):

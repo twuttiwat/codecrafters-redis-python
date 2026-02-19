@@ -56,8 +56,9 @@ class Server:
             print(f"Received response from master: {response!r}")
 
         await send_command("PING")
-        await send_command("REPLCONF", "listening-port", self.port)
-        await send_command("REPLCONF", "capa", "psync2")
+        await send_command(f"REPLCONF listening-port {self.port}")
+        await send_command("REPLCONF capa psync2")
+        await send_command("REPLCONF ? -1")
 
     async def start(self):
 
