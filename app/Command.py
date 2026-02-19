@@ -196,6 +196,12 @@ async def info(ctx, info_name):
     return resp.encode_bulk_str(result)
 
 
+@command()
+async def replconf(ctx, *args):
+    print(f"REPLCONF with args: {args}")
+    return resp.OK
+
+
 class Command:
     def __init__(self, name, args):
         self.name = name
