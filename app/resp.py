@@ -1,3 +1,5 @@
+from imaplib import Commands
+
 OK = b"+OK\r\n"
 NULL_ARRAY = b"*-1\r\n"
 NULL_BULK_STR = b"$-1\r\n"
@@ -33,6 +35,14 @@ def encode_array(values):
 
 def encode_bulk_str(str):
     return f"${len(str)}\r\n{str}\r\n".encode()
+
+
+def encode_command(*args):
+    command_array = []
+    for arg in args:
+        command_array.append(str(arg))
+
+    return encode_array(command_array)
 
 
 def encode_int(num):

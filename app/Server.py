@@ -2,16 +2,19 @@ import asyncio
 from dataclasses import dataclass
 from types import SimpleNamespace
 
+import app.resp as resp
 from app.Command import Command
 from app.state.ClientState import ClientState
 from app.state.State import State
 
 
 class Server:
-    def __init__(self, role, port):
+    def __init__(self, role="master", port=6379, master_host=None, master_port=None):
         self.state = State()
         self.role = role
         self.port = port
+        self.master_host = master_host
+        self.master_port = master_port
         self.server = None
 
     async def handle_client(self, reader, writer):
@@ -40,7 +43,25 @@ class Server:
         writer.close()
         await writer.wait_closed()
 
+    async def handshake(self):
+        reader, writer = await asyncio.open_connection(
+            self.master_host, self.master_port
+        )
+
+        async def send_command(*args):
+            command = resp.encode_command(*args)
+            writer.write(command)
+            await writer.drain()
+
+        await send_command("PING")
+
+        response = await reader.read(1024)
+        print(f"Received response from master: {response!r}")
+
     async def start(self):
+
+        if self.role == "slave":
+            await self.handshake()
 
         self.server = await asyncio.start_server(
             self.handle_client, "localhost", self.port
