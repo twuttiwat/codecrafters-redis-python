@@ -52,11 +52,12 @@ class Server:
             command = resp.encode_command(*args)
             writer.write(command)
             await writer.drain()
+            response = await reader.read(1024)
+            print(f"Received response from master: {response!r}")
 
         await send_command("PING")
-
-        response = await reader.read(1024)
-        print(f"Received response from master: {response!r}")
+        await send_command("REPLCONF", "listening-port", self.port)
+        await send_command("REPLCONF", "capa", "psync2")
 
     async def start(self):
 
