@@ -18,6 +18,10 @@ class Server:
         self.server = None
 
     async def handle_client(self, reader, writer):
+        async def write_response(response):
+            writer.write(response)
+            await writer.drain()
+
         addr = writer.get_extra_info("peername")
         print(f"Connected by {addr}")
 
@@ -32,7 +36,10 @@ class Server:
 
             command = Command.parse(bytes_data)
             ctx = SimpleNamespace(
-                role=self.role, state=self.state, client_state=client_state
+                role=self.role,
+                state=self.state,
+                client_state=client_state,
+                write=write_response,
             )
             response = await command.dispatch(ctx)
 

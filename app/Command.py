@@ -1,4 +1,4 @@
-from imaplib import Commands
+import base64
 
 import app.resp as resp
 
@@ -206,9 +206,15 @@ async def replconf(ctx, *args):
 
 @command()
 async def psync(ctx, *args):
-    return resp.encode_simple_str(
+    full_resync_resp = resp.encode_simple_str(
         "FULLRESYNC 8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb 0"
     )
+    await ctx.write(full_resync_resp)
+
+    empty_rdb_base64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
+    empty_rdb_bytes = base64.b64decode(empty_rdb_base64)
+    empty_rdb_resp = f"${len(empty_rdb_bytes)}\r\n".encode() + empty_rdb_bytes
+    return empty_rdb_resp
 
 
 class Command:
