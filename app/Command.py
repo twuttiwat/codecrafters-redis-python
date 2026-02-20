@@ -35,6 +35,7 @@ async def set(ctx, key, value, exp_unit=None, exp_val=None):
                 expired_in_ms = int(exp_val) * 1000
 
     ctx.state.set(key, value, expired_in_ms)
+
     return resp.OK
 
 
@@ -214,13 +215,17 @@ async def psync(ctx, *args):
     empty_rdb_base64 = "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
     empty_rdb_bytes = base64.b64decode(empty_rdb_base64)
     empty_rdb_resp = f"${len(empty_rdb_bytes)}\r\n".encode() + empty_rdb_bytes
+
+    ctx.state.add_replica_write(ctx.replica_write)
+
     return empty_rdb_resp
 
 
 class Command:
-    def __init__(self, name, args):
+    def __init__(self, name, args, command_in_bytes):
         self.name = name
         self.args = args
+        self.command_in_bytes = command_in_bytes
 
     def __repr__(self):
         return f"{self.name}{self.args}"
@@ -230,9 +235,13 @@ class Command:
         values = resp.decode_command(bytes_data)
         match values:
             case [command, *args]:
-                return Command(command, args)
+                return Command(command, args, bytes_data)
             case _:
                 raise ValueError("Invalid or empty RESP command array")
+
+    def change_state(self):
+        commands = ["SET", "INCR", "RPUSH", "LPUSH", "XADD", "LPOP", "BLPOP", "EXEC"]
+        return self.name.upper() in commands
 
     def is_queued(self, fn_name):
         return fn_name.upper() != "EXEC" and fn_name.upper() != "DISCARD"
@@ -255,4 +264,6 @@ class Command:
             return ctx.client_state.queue_command(func, final_args)
         else:
             result = await func(*final_args)
+            if self.change_state():
+                ctx.state.replicate(self.command_in_bytes)
             return result

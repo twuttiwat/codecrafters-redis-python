@@ -1,5 +1,3 @@
-from imaplib import Commands
-
 OK = b"+OK\r\n"
 NULL_ARRAY = b"*-1\r\n"
 NULL_BULK_STR = b"$-1\r\n"

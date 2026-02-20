@@ -11,6 +11,7 @@ class State:
         self.is_multi = False
         self.multi_queue = []
         self._states = [self.key_value_dict, self.list_dict, self.stream_dict]
+        self._replica_writes = []
 
     def __getattr__(self, name):
         for state in self._states:
@@ -42,3 +43,10 @@ class State:
             return "stream"
         else:
             return None
+
+    def add_replica_write(self, write_func):
+        self._replica_writes.append(write_func)
+
+    def replicate(self, command_in_bytes):
+        for write_func in self._replica_writes:
+            write_func(command_in_bytes)

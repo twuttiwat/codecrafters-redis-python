@@ -40,6 +40,7 @@ class Server:
                 state=self.state,
                 client_state=client_state,
                 write=write_response,
+                replica_write=writer.write,
             )
             response = await command.dispatch(ctx)
 
